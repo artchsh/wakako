@@ -7,6 +7,7 @@ name = "wakako"
 version = "0.1.0"
 description = "Wakako: Google Search Console + Analytics from the command line, built for AI agents (personal-account OAuth)"
 requires-python = ">=3.10"
+license = { text = "MIT" }
 dependencies = [
   "typer>=0.12",
   "rich>=13",
