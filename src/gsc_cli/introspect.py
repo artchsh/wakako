@@ -8,6 +8,7 @@ CHOICES = {
     "--dims": list(client.VALID_DIMS),
     "--type": list(client.VALID_TYPES),
     "--format": list(output.FORMATS),
+    "--sort": list(client.SORT_METRICS),
 }
 
 

@@ -9,7 +9,7 @@ from typing import Annotated, Optional
 import typer
 
 from gsc_cli import auth, client, doctor, introspect, output
-from gsc_cli.errors import AuthError, GscError
+from gsc_cli.errors import AuthError, GscError, UsageError
 
 app = typer.Typer(
     help=(
@@ -30,6 +30,9 @@ FormatOpt = Annotated[
 ]
 OutputOpt = Annotated[
     Optional[Path], typer.Option("--output", help="Write to this file instead of stdout.")
+]
+YesOpt = Annotated[
+    bool, typer.Option("--yes", help="Confirm an action that changes something at Google.")
 ]
 
 
@@ -62,6 +65,10 @@ def _emit(rows: list[dict], fmt: str, output_path: Optional[Path]) -> None:
     output.emit(output.format_rows(rows, fmt, width=width), output_path)
 
 
+def _progress(done: int, total: int) -> None:
+    typer.echo(f"inspected {done}/{total}", err=True)
+
+
 @app.command(epilog="Needs a human and a browser. First time: --client-secret PATH.")
 @guarded
 def login(
@@ -72,10 +79,18 @@ def login(
             help="Path to the OAuth 'Desktop app' client_secret.json (saved for reuse).",
         ),
     ] = None,
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write",
+            help="Also grant write access: submit/delete sitemaps and request indexing.",
+        ),
+    ] = False,
 ):
     """Log in with your Google account in the browser (human step)."""
-    token = auth.login(client_secret)
-    typer.echo(f"Logged in. Token saved to {token}")
+    token = auth.login(client_secret, write=write)
+    access = "read + write" if write else "read-only"
+    typer.echo(f"Logged in ({access}). Token saved to {token}")
 
 
 @app.command()
@@ -97,7 +112,6 @@ def doctor_cmd(fmt: FormatOpt = None, output_path: OutputOpt = None):
     _emit(rows, fmt, output_path)
     if any(r["status"] == "fail" for r in rows):
         raise typer.Exit(AuthError.exit_code)
-
 
 
 @app.command("commands", epilog="Always prints JSON. Example: gsc commands")
@@ -151,29 +165,160 @@ def query(
     _emit(rows, fmt, output_path)
 
 
-@app.command(epilog="Example: gsc inspect https://example.com/a --site sc-domain:example.com")
+@app.command(
+    epilog=(
+        "Examples: gsc compare sc-domain:example.com --dims query --sort clicks --limit 20 | "
+        "gsc compare sc-domain:example.com --dims page --days 7 --min-impressions 100"
+    )
+)
 @guarded
-def inspect(
-    url: Annotated[str, typer.Argument(help="Page URL to inspect.")],
-    site: Annotated[str, typer.Option("--site", help="The property that contains the URL.")],
+def compare(
+    site: Annotated[str, typer.Argument(help="sc-domain:example.com or https://example.com/")],
+    dims: Annotated[str, typer.Option("--dims", help="Comma-separated: query,page,country,device,date. Empty = totals.")] = "query",
+    days: Annotated[int, typer.Option("--days", help="Length of each period; compares the latest N days with the N before.")] = 28,
+    start: Annotated[Optional[str], typer.Option("--start", help="Current period start YYYY-MM-DD (use with --end).")] = None,
+    end: Annotated[Optional[str], typer.Option("--end", help="Current period end YYYY-MM-DD (use with --start).")] = None,
+    filters: Annotated[
+        Optional[list[str]],
+        typer.Option("--filter", help='Repeatable, e.g. "page contains /blog".'),
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Max rows (0 = all).")] = 50,
+    search_type: Annotated[str, typer.Option("--type", help="web, image, video, news, discover, googleNews")] = "web",
+    sort: Annotated[str, typer.Option("--sort", help="Rank rows by the biggest absolute change in: clicks, impressions, ctr, position.")] = "clicks",
+    min_impressions: Annotated[int, typer.Option("--min-impressions", help="Drop rows with fewer impressions in both periods.")] = 0,
     fmt: FormatOpt = None,
     output_path: OutputOpt = None,
 ):
-    """Show index status for a URL (URL Inspection)."""
+    """Compare this period with the previous one: per-row deltas for clicks, impressions, ctr, position."""
     fmt = output.resolve_format(fmt)
-    _emit(client.inspect_url(auth.get_service(), site, url), fmt, output_path)
+    begin, finish = client.date_range(days, start, end)
+    dimensions = client.parse_dims(dims)
+    parsed_filters = [client.parse_filter(f) for f in filters or []]
+    client.validate_search_type(search_type)
+    client.validate_sort(sort)
+    rows = client.compare_rows(
+        auth.get_service(), site, dimensions, begin, finish, parsed_filters,
+        search_type, limit, sort=sort, min_impressions=min_impressions,
+    )
+    _emit(rows, fmt, output_path)
 
 
-@app.command(epilog="Example: gsc sitemaps sc-domain:example.com")
+@app.command(
+    epilog=(
+        "Examples: gsc inspect https://example.com/a --site sc-domain:example.com | "
+        "gsc inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com "
+        "--only-unindexed"
+    )
+)
+@guarded
+def inspect(
+    url: Annotated[Optional[str], typer.Argument(help="One page URL to inspect (or use --sitemap).")] = None,
+    site: Annotated[str, typer.Option("--site", help="The property that contains the URL(s).")] = ...,
+    sitemap: Annotated[Optional[str], typer.Option("--sitemap", help="Inspect every URL in this sitemap (follows sitemap indexes).")] = None,
+    limit: Annotated[int, typer.Option("--limit", help="With --sitemap: inspect at most N URLs (0 = all). Quota is ~2000/day.")] = 100,
+    only_unindexed: Annotated[bool, typer.Option("--only-unindexed", help="With --sitemap: list only URLs that are not indexed (verdict != PASS) or failed.")] = False,
+    fmt: FormatOpt = None,
+    output_path: OutputOpt = None,
+):
+    """Show index status for a URL, or for every URL in a sitemap (URL Inspection)."""
+    fmt = output.resolve_format(fmt)
+    if bool(url) == bool(sitemap):
+        raise UsageError("Give exactly one of: a URL argument, or --sitemap URL.")
+    if only_unindexed and not sitemap:
+        raise UsageError("--only-unindexed only applies with --sitemap.")
+    service = auth.get_service()
+    if url:
+        rows = client.inspect_url(service, site, url)
+    else:
+        urls = client.sitemap_urls(sitemap)
+        if limit > 0:
+            urls = urls[:limit]
+        progress = _progress if sys.stderr.isatty() else None
+        rows = client.inspect_many(
+            service, site, urls, only_unindexed, progress,
+            service_factory=auth.get_service, workers=client.INSPECT_WORKERS,
+        )
+    _emit(rows, fmt, output_path)
+
+
+@app.command(
+    epilog=(
+        "Examples: gsc sitemaps sc-domain:example.com | "
+        "gsc sitemaps sc-domain:example.com --submit https://example.com/sitemap.xml | "
+        "gsc sitemaps sc-domain:example.com --delete https://example.com/old.xml --yes"
+    )
+)
 @guarded
 def sitemaps(
     site: Annotated[str, typer.Argument(help="sc-domain:example.com or https://example.com/")],
+    submit: Annotated[Optional[str], typer.Option("--submit", help="Submit or resubmit this sitemap URL (needs `gsc login --write`).")] = None,
+    delete: Annotated[Optional[str], typer.Option("--delete", help="Remove this sitemap from Search Console (needs --yes and `gsc login --write`).")] = None,
+    yes: YesOpt = False,
     fmt: FormatOpt = None,
     output_path: OutputOpt = None,
 ):
-    """List sitemaps with status and error counts."""
+    """List sitemaps with status and error counts; optionally submit or delete one."""
     fmt = output.resolve_format(fmt)
-    _emit(client.list_sitemaps(auth.get_service(), site), fmt, output_path)
+    if submit and delete:
+        raise UsageError("Use only one of --submit and --delete.")
+    if delete and not yes:
+        raise UsageError(f"Pass --yes to confirm removing {delete} from {site}.")
+    service = auth.get_service()
+    if submit:
+        rows = client.submit_sitemap(service, site, submit)
+    elif delete:
+        rows = client.delete_sitemap(service, site, delete)
+    else:
+        rows = client.list_sitemaps(service, site)
+    _emit(rows, fmt, output_path)
+
+
+@app.command(
+    "request-indexing",
+    epilog=(
+        "Best-effort: Google documents the Indexing API only for job-posting and livestream pages, "
+        "so it may ignore other URLs. Needs property OWNER access, the Web Search Indexing API "
+        "enabled in your GCP project, and `gsc login --write`. Dry run unless --yes. "
+        "Examples: gsc request-indexing https://example.com/new-post --yes | "
+        "gsc request-indexing --sitemap https://example.com/sitemap.xml "
+        "--site sc-domain:example.com --only-unindexed --yes"
+    ),
+)
+@guarded
+def request_indexing_cmd(
+    urls: Annotated[Optional[list[str]], typer.Argument(help="Page URLs to submit.")] = None,
+    sitemap: Annotated[Optional[str], typer.Option("--sitemap", help="Also submit every URL in this sitemap.")] = None,
+    site: Annotated[Optional[str], typer.Option("--site", help="Property; required with --only-unindexed.")] = None,
+    only_unindexed: Annotated[bool, typer.Option("--only-unindexed", help="Inspect the URLs first (max --limit) and submit only those not indexed.")] = False,
+    limit: Annotated[int, typer.Option("--limit", help="Max URLs to submit (default Indexing API quota is ~200/day).")] = 50,
+    yes: YesOpt = False,
+    fmt: FormatOpt = None,
+    output_path: OutputOpt = None,
+):
+    """Ask Google to (re)crawl URLs via the Indexing API. Dry run unless --yes."""
+    fmt = output.resolve_format(fmt)
+    targets = list(urls or [])
+    if sitemap:
+        targets += client.sitemap_urls(sitemap)
+    targets = list(dict.fromkeys(targets))
+    if not targets:
+        raise UsageError("Give at least one URL, or --sitemap URL.")
+    if only_unindexed:
+        if not site:
+            raise UsageError("--only-unindexed needs --site.")
+        inspected = client.inspect_many(
+            auth.get_service(), site, targets[:limit] if limit > 0 else targets,
+            only_unindexed=True, service_factory=auth.get_service, workers=client.INSPECT_WORKERS,
+        )
+        targets = [r["url"] for r in inspected if not r["error"]]
+    elif limit > 0:
+        targets = targets[:limit]
+
+    if not yes:
+        rows = [{"url": u, "status": "dry-run", "detail": "pass --yes to send"} for u in targets]
+    else:
+        rows = client.request_indexing(auth.get_indexing_service(), targets)
+    _emit(rows, fmt, output_path)
 
 
 def _skill_text() -> str:

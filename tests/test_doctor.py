@@ -59,3 +59,16 @@ def test_api_denied(cfg, monkeypatch):
     assert rows["credentials"]["status"] == "ok"
     assert rows["api_access"]["status"] == "fail"
     assert "API not enabled" in rows["api_access"]["detail"]
+
+
+def test_doctor_reports_write_access(cfg, monkeypatch):
+    cfg.mkdir()
+    (cfg / "token.json").write_text("{}")
+    monkeypatch.setattr(auth, "get_service", lambda: "svc")
+    monkeypatch.setattr(client, "list_sites", lambda svc: [])
+    monkeypatch.setattr(auth, "granted_scopes", lambda: list(auth.SCOPES))
+    row = by_check(doctor.run_checks())["write_access"]
+    assert row["status"] == "ok" and "not granted" in row["detail"]
+    monkeypatch.setattr(auth, "granted_scopes", lambda: list(auth.SCOPES_WRITE))
+    row = by_check(doctor.run_checks())["write_access"]
+    assert row["status"] == "ok" and row["detail"].startswith("granted")

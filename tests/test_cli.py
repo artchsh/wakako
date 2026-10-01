@@ -131,8 +131,9 @@ def test_inspect_requires_site_and_passes_args(monkeypatch):
 def test_login_passes_client_secret_path(monkeypatch, tmp_path):
     seen = {}
 
-    def fake_login(path):
+    def fake_login(path, write=False):
         seen["path"] = path
+        seen["write"] = write
         return tmp_path / "token.json"
 
     monkeypatch.setattr(auth, "login", fake_login)
@@ -140,7 +141,10 @@ def test_login_passes_client_secret_path(monkeypatch, tmp_path):
     result = runner.invoke(app, ["login", "--client-secret", str(secret)])
     assert result.exit_code == 0, result.output
     assert str(seen["path"]) == str(secret)
-    assert "Logged in" in result.output
+    assert "Logged in (read-only)" in result.output
+    assert seen["write"] is False
+    result = runner.invoke(app, ["login", "--client-secret", str(secret), "--write"])
+    assert seen["write"] is True and "read + write" in result.output
 
 
 def test_logout(monkeypatch):
@@ -224,8 +228,8 @@ def test_skill_mentions_every_command_and_flag():
     doc = json.loads(runner.invoke(app, ["commands"]).output)
     for command in doc["commands"]:
         assert f"gsc {command['name']}" in guide, command["name"]
-    query = next(c for c in doc["commands"] if c["name"] == "query")
-    for param in query["params"]:
-        for flag in param.get("flags", []):
-            if flag not in ("--format", "--output"):
-                assert flag in guide, flag
+    for command in doc["commands"]:
+        for param in command["params"]:
+            for flag in param.get("flags", []):
+                if flag not in ("--format", "--output"):
+                    assert flag in guide, (command["name"], flag)

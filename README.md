@@ -1,7 +1,7 @@
 # gsc-wrapper
 
 Google Search Console from the command line, using your personal Google account
-(OAuth — no service accounts). Read-only.
+(OAuth — no service accounts). Read-only by default; write actions are opt-in.
 
 ## Install (standalone, global `gsc` command)
 
@@ -31,10 +31,46 @@ gsc login --client-secret path/to/client_secret.json   # opens your browser once
 gsc sites
 gsc query sc-domain:example.com --dims query,page --days 28 --limit 50
 gsc query https://example.com/ --dims page --filter "page contains /blog" --format csv --output blog.csv
+gsc compare sc-domain:example.com --dims query --limit 20      # this period vs the one before
 gsc inspect https://example.com/some-page --site sc-domain:example.com
+gsc inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed
 gsc sitemaps sc-domain:example.com
 gsc logout
 ```
+
+`gsc compare` compares the latest `--days` (default 28) with the same-length period right
+before it and gives each row `clicks`, `clicks_prev`, `clicks_delta`, `clicks_pct` (and the
+same for impressions, ctr, position), biggest movers first (`--sort`, `--min-impressions`).
+
+`gsc inspect --sitemap` inspects every URL in a sitemap (sitemap indexes are followed),
+4 at a time, and returns one row per URL; `--only-unindexed` keeps just the ones Google
+has not indexed. URL Inspection quota is about 2,000 URLs per property per day.
+
+## Write actions (optional, opt-in)
+
+Everything above is read-only. To also **submit/delete sitemaps** and **request indexing**,
+log in once more with write access (a human step; it replaces the saved token):
+
+```bash
+gsc login --write
+gsc sitemaps sc-domain:example.com --submit https://example.com/sitemap.xml
+gsc sitemaps sc-domain:example.com --delete https://example.com/old-sitemap.xml --yes
+gsc request-indexing https://example.com/new-post                   # dry run: lists what would be sent
+gsc request-indexing https://example.com/new-post --yes             # actually send
+gsc request-indexing --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed --yes
+```
+
+**About `request-indexing`:** Google has no public API for the "Request indexing" button in
+the Search Console UI. This command uses the Google **Indexing API**, which Google documents
+only for job-posting and livestream pages. It accepts other URLs, but Google may ignore
+them, so treat it as best-effort (the supported way to announce new URLs is a sitemap).
+It also needs:
+
+1. You to be a verified **owner** of the property (full-user access is not enough).
+2. The **Web Search Indexing API** enabled in your GCP project (APIs & Services > Library).
+3. `gsc login --write`. The default quota is about 200 URLs per day.
+
+Without `--yes`, `request-indexing` and `sitemaps --delete` change nothing.
 
 `--format table|json|csv` and `--output FILE` work on every data command.
 Search Analytics data lags by ~3 days, so `--days` counts back from 3 days ago.

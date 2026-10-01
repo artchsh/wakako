@@ -21,6 +21,13 @@ def run_checks() -> list[dict]:
         add("api_access", "skipped", "needs a valid login")
         return rows
     add("token", "ok", str(token))
+    write_granted = set(auth.SCOPES_WRITE) <= set(auth.granted_scopes())
+    add(
+        "write_access",
+        "ok",
+        "granted (sitemap submit/delete, request-indexing)" if write_granted
+        else "not granted (optional): read-only. Run `gsc login --write` for write actions",
+    )
 
     try:
         service = auth.get_service()

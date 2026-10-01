@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import sys
@@ -12,6 +13,11 @@ from googleapiclient.discovery import build
 from gsc_cli.errors import AuthError, UsageError
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
+# Opt-in via `gsc login --write`: manage sitemaps + Indexing API (request indexing).
+SCOPES_WRITE = [
+    "https://www.googleapis.com/auth/webmasters",
+    "https://www.googleapis.com/auth/indexing",
+]
 NOT_LOGGED_IN = "Not logged in or session expired - run `gsc login`."
 LOGIN_HINT = "`gsc login` opens a browser and needs a human; an agent cannot complete it."
 
@@ -35,7 +41,7 @@ def token_file() -> Path:
     return config_dir() / "token.json"
 
 
-def login(client_secret_path: "Path | str | None" = None) -> Path:
+def login(client_secret_path: "Path | str | None" = None, write: bool = False) -> Path:
     if client_secret_path is not None:
         src = Path(client_secret_path)
         if not src.is_file():
@@ -51,7 +57,7 @@ def login(client_secret_path: "Path | str | None" = None) -> Path:
 
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            str(client_secret_file()), SCOPES
+            str(client_secret_file()), SCOPES_WRITE if write else SCOPES
         )
     except (ValueError, KeyError):
         raise UsageError(
@@ -76,7 +82,7 @@ def get_credentials():
     if not path.is_file():
         raise AuthError(NOT_LOGGED_IN, hint=LOGIN_HINT)
     try:
-        creds = Credentials.from_authorized_user_file(str(path), SCOPES)
+        creds = Credentials.from_authorized_user_file(str(path), None)
     except (ValueError, KeyError):
         raise AuthError(NOT_LOGGED_IN, hint=LOGIN_HINT) from None
     if creds.valid:
@@ -95,3 +101,16 @@ def get_service():
     return build(
         "searchconsole", "v1", credentials=get_credentials(), cache_discovery=False
     )
+
+
+def get_indexing_service():
+    return build("indexing", "v3", credentials=get_credentials(), cache_discovery=False)
+
+
+def granted_scopes() -> list[str]:
+    """Scopes recorded in the saved token ([] if not logged in or unreadable)."""
+    try:
+        scopes = json.loads(token_file().read_text(encoding="utf-8")).get("scopes") or []
+    except (OSError, ValueError):
+        return []
+    return scopes.split(" ") if isinstance(scopes, str) else list(scopes)
