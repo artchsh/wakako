@@ -293,6 +293,19 @@ def test_missing_write_scope_points_to_login_write():
     assert "gsc login --ga" in ga_exc.value.hint
 
 
+def test_api_not_enabled_gets_an_enable_it_hint_not_a_property_hint():
+    from gsc_cli.errors import PermissionDenied
+
+    err = http_error(403, {"error": {
+        "message": "Google Analytics Admin API has not been used in project 1 before or it is disabled. "
+                   "Enable it by visiting https://console.developers.google.com/apis/api/x",
+        "details": [{"reason": "SERVICE_DISABLED"}]}})
+    with pytest.raises(PermissionDenied) as exc:
+        client.execute(FakeRequest(err), site="properties/1", permission_hint="Check the property ID")
+    assert "Enable it by visiting" in str(exc.value)
+    assert "Enable that API" in exc.value.hint and "property ID" not in exc.value.hint
+
+
 def test_plain_403_is_still_permission_denied():
     from gsc_cli.errors import PermissionDenied
 

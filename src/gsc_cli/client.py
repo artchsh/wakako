@@ -127,6 +127,11 @@ def _needs_write_scope(error: HttpError) -> bool:
     return "scope_insufficient" in text or ("insufficient" in text and "scope" in text)
 
 
+def _api_disabled(error: HttpError) -> bool:
+    text = (error.content or b"").decode("utf-8", "replace")
+    return "SERVICE_DISABLED" in text or "has not been used in project" in text
+
+
 def execute(
     request, *, site: str | None = None, sleep=time.sleep,
     login_flag: str = "--write", permission_hint: str | None = None,
@@ -149,6 +154,12 @@ def execute(
                 raise AuthError(
                     "Missing permission scope for this action (403).",
                     hint=f"Run `gsc login {login_flag}` (human step: browser sign-in) to grant access.",
+                ) from e
+            if status == 403 and _api_disabled(e):
+                raise PermissionDenied(
+                    f"{_reason(e)}",
+                    hint="Enable that API in your Google Cloud project (the link is in the "
+                    "message), wait a minute or two for it to propagate, then retry.",
                 ) from e
             if status == 403:
                 target = f"No access to {site}" if site else "Permission denied"
