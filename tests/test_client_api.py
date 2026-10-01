@@ -4,8 +4,8 @@ import httplib2
 import pytest
 from googleapiclient.errors import HttpError
 
-from gsc_cli import client
-from gsc_cli.errors import GscError, PermissionDenied, QuotaError, UsageError
+from wakako import client
+from wakako.errors import WakakoError, PermissionDenied, QuotaError, UsageError
 
 
 def http_error(status, message="boom"):
@@ -33,7 +33,7 @@ def test_execute_returns_payload():
 
 
 def test_execute_403_names_the_site():
-    with pytest.raises(GscError, match="No access to sc-domain:x.com"):
+    with pytest.raises(WakakoError, match="No access to sc-domain:x.com"):
         client.execute(FakeRequest(http_error(403)), site="sc-domain:x.com")
 
 
@@ -47,14 +47,14 @@ def test_execute_retries_429_then_succeeds():
 def test_execute_gives_up_after_three_429s():
     sleeps = []
     req = FakeRequest(http_error(429), http_error(429), http_error(429))
-    with pytest.raises(GscError, match="Quota"):
+    with pytest.raises(WakakoError, match="Quota"):
         client.execute(req, sleep=sleeps.append)
     assert req.calls == 3
     assert sleeps == [1, 2]
 
 
 def test_execute_other_errors_include_status_and_reason():
-    with pytest.raises(GscError, match=r"500.*kaput"):
+    with pytest.raises(WakakoError, match=r"500.*kaput"):
         client.execute(FakeRequest(http_error(500, "kaput")))
 
 

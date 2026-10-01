@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from gsc_cli.errors import UsageError
+from wakako.errors import UsageError
 
 FORMATS = ("table", "json", "csv")
 

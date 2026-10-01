@@ -1,5 +1,5 @@
-from gsc_cli import auth, client
-from gsc_cli.errors import GscError
+from wakako import auth, client
+from wakako.errors import WakakoError
 
 
 def run_checks() -> list[dict]:
@@ -14,10 +14,10 @@ def run_checks() -> list[dict]:
         "client_secret",
         "ok" if secret.is_file() else "fail",
         str(secret) if secret.is_file()
-        else "missing - run `gsc login --client-secret PATH` (human step, see README)",
+        else "missing - run `wakako login --client-secret PATH` (human step, see README)",
     )
     if not token.is_file():
-        add("token", "fail", "not logged in - a human must run `gsc login`")
+        add("token", "fail", "not logged in - a human must run `wakako login`")
         add("api_access", "skipped", "needs a valid login")
         return rows
     add("token", "ok", str(token))
@@ -26,20 +26,20 @@ def run_checks() -> list[dict]:
         "write_access",
         "ok",
         "granted (sitemap submit/delete, request-indexing)" if write_granted
-        else "not granted (optional): read-only. Run `gsc login --write` for write actions",
+        else "not granted (optional): read-only. Run `wakako login --write` for write actions",
     )
 
     ga_granted = auth.GA_SCOPE in auth.granted_scopes()
     add(
         "ga_access",
         "ok",
-        "granted (gsc ga ...)" if ga_granted
-        else "not granted (optional): GSC works without it. Run `gsc login --ga` for Analytics",
+        "granted (wakako ga ...)" if ga_granted
+        else "not granted (optional): GSC works without it. Run `wakako login --ga` for Analytics",
     )
 
     try:
         service = auth.get_service()
-    except GscError as e:
+    except WakakoError as e:
         add("credentials", "fail", str(e))
         add("api_access", "skipped", "needs a valid login")
         return rows
@@ -47,7 +47,7 @@ def run_checks() -> list[dict]:
 
     try:
         count = len(client.list_sites(service))
-    except GscError as e:
+    except WakakoError as e:
         add("api_access", "fail", str(e))
     else:
         add("api_access", "ok", f"{count} propert{'y' if count == 1 else 'ies'} visible")

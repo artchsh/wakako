@@ -5,8 +5,8 @@ import httplib2
 import pytest
 from googleapiclient.errors import HttpError
 
-from gsc_cli import ga
-from gsc_cli.errors import AuthError, PermissionDenied, UsageError
+from wakako import ga
+from wakako.errors import AuthError, PermissionDenied, UsageError
 
 
 class FakeRequest:
@@ -41,7 +41,7 @@ def test_normalize_property(value):
 
 @pytest.mark.parametrize("bad", ["", "abc", "properties/x", "G-ABC123"])
 def test_normalize_property_rejects_non_numeric(bad):
-    with pytest.raises(UsageError, match="gsc ga properties"):
+    with pytest.raises(UsageError, match="wakako ga properties"):
         ga.normalize_property(bad)
 
 
@@ -180,7 +180,7 @@ def test_run_report_permission_error_has_ga_hint():
     props = FakeProperties(http_error(403, {"error": {"message": "User does not have access"}}))
     with pytest.raises(PermissionDenied) as exc:
         ga.run_report(Fake(properties=props), "123", [], ["sessions"], "2026-09-01", "2026-09-28")
-    assert "properties/123" in str(exc.value) and "gsc ga properties" in exc.value.hint
+    assert "properties/123" in str(exc.value) and "wakako ga properties" in exc.value.hint
 
 
 def test_run_report_missing_scope_points_to_login_ga():
@@ -188,7 +188,7 @@ def test_run_report_missing_scope_points_to_login_ga():
                                      "details": [{"reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}})
     with pytest.raises(AuthError) as exc:
         ga.run_report(Fake(properties=FakeProperties(err)), "123", [], ["sessions"], "2026-09-01", "2026-09-28")
-    assert "gsc login --ga" in exc.value.hint
+    assert "wakako login --ga" in exc.value.hint
 
 
 # ---- list_properties ----------------------------------------------------------------------------

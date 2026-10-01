@@ -1,13 +1,13 @@
 ---
-name: gsc
-description: Query Google Search Console from the terminal with the `gsc` CLI - search performance (clicks, impressions, CTR, position by query/page/country/device/date), period-over-period comparison, URL indexing status (single or whole sitemap), sitemaps, best-effort indexing requests, and optional Google Analytics 4 reports plus a combined search+analytics page analysis. Use when the user asks about organic search traffic, rankings, keywords, indexing, Search Console data, or website analytics / GA4.
+name: wakako
+description: Query Google Search Console from the terminal with the `wakako` CLI - search performance (clicks, impressions, CTR, position by query/page/country/device/date), period-over-period comparison, URL indexing status (single or whole sitemap), sitemaps, best-effort indexing requests, and optional Google Analytics 4 reports plus a combined search+analytics page analysis. Use when the user asks about organic search traffic, rankings, keywords, indexing, Search Console data, or website analytics / GA4.
 ---
 
-# gsc - Google Search Console CLI
+# wakako - Google Search Console + Analytics CLI
 
 Access to the user's Search Console through their personal Google login. Reads work by
 default; changing things at Google (submit/delete sitemap, request indexing) needs an
-extra opt-in login. Run `gsc doctor` first if you are unsure whether it is set up.
+extra opt-in login. Run `wakako doctor` first if you are unsure whether it is set up.
 
 ## Output contract (built for agents)
 
@@ -16,48 +16,48 @@ extra opt-in login. Run `gsc doctor` first if you are unsure whether it is set u
 - Errors are a single JSON object on **stderr**: `{"error": {"code", "message", "hint"}}`.
 - Exit codes: `0` ok, `1` other, `2` usage error (fix your arguments), `3` not logged in
   (or missing write scope), `4` no permission for that property, `5` quota exceeded (wait, retry).
-- `gsc commands` prints every command, option, valid value and exit code as JSON. Use it
+- `wakako commands` prints every command, option, valid value and exit code as JSON. Use it
   instead of guessing flags.
 
 ## Human-only steps
 
-`gsc login` opens a browser for Google sign-in. **You cannot do it.** On exit code `3`,
-or if `gsc doctor` reports a failing `token`/`credentials` check, stop and ask the user
-to run `gsc login` (first time only: `gsc login --client-secret path/to/client_secret.json`,
+`wakako login` opens a browser for Google sign-in. **You cannot do it.** On exit code `3`,
+or if `wakako doctor` reports a failing `token`/`credentials` check, stop and ask the user
+to run `wakako login` (first time only: `wakako login --client-secret path/to/client_secret.json`,
 see the README for creating that file).
 
-Write actions need `gsc login --write` and Google Analytics needs `gsc login --ga` (both
+Write actions need `wakako login --write` and Google Analytics needs `wakako login --ga` (both
 human; they can be combined, and a later login keeps what was already granted).
-`gsc doctor` shows `write_access` and `ga_access`: if one says "not granted", ask the
+`wakako doctor` shows `write_access` and `ga_access`: if one says "not granted", ask the
 user before attempting those commands. Both are optional; everything else works without them.
 
 ## Commands
 
 ```bash
-gsc doctor                                   # setup/health check, never prompts
-gsc sites                                    # properties the user can access -> use these exact strings
-gsc query SITE [options]                     # search analytics
-gsc compare SITE [options]                   # this period vs the previous one, per-row deltas
-gsc inspect URL --site SITE                  # indexing status of one URL
-gsc inspect --sitemap SITEMAP_URL --site SITE   # ...of every URL in a sitemap
-gsc sitemaps SITE                            # sitemaps + error/warning counts
-gsc sitemaps SITE --submit URL               # (write) submit/resubmit a sitemap
-gsc sitemaps SITE --delete URL --yes         # (write) remove a sitemap from Search Console
-gsc request-indexing URL... [--yes]          # (write, best-effort) ask Google to recrawl
-gsc ga properties                           # (GA) GA4 properties: numeric ID, name, account, website URLs
-gsc ga report PROPERTY [options]             # (GA) any GA4 report
-gsc ga landing-pages SITE --property ID      # (GA) per page: GSC clicks next to GA organic sessions
-gsc commands                                 # full machine-readable CLI description
-gsc logout                                   # delete the saved token (only if the user asks)
-gsc skill show                               # print this guide
-gsc skill install [--dest DIR]               # copy this guide to <DIR or ~/.claude/skills>/gsc/SKILL.md
+wakako doctor                                   # setup/health check, never prompts
+wakako sites                                    # properties the user can access -> use these exact strings
+wakako query SITE [options]                     # search analytics
+wakako compare SITE [options]                   # this period vs the previous one, per-row deltas
+wakako inspect URL --site SITE                  # indexing status of one URL
+wakako inspect --sitemap SITEMAP_URL --site SITE   # ...of every URL in a sitemap
+wakako sitemaps SITE                            # sitemaps + error/warning counts
+wakako sitemaps SITE --submit URL               # (write) submit/resubmit a sitemap
+wakako sitemaps SITE --delete URL --yes         # (write) remove a sitemap from Search Console
+wakako request-indexing URL... [--yes]          # (write, best-effort) ask Google to recrawl
+wakako ga properties                           # (GA) GA4 properties: numeric ID, name, account, website URLs
+wakako ga report PROPERTY [options]             # (GA) any GA4 report
+wakako ga landing-pages SITE --property ID      # (GA) per page: GSC clicks next to GA organic sessions
+wakako commands                                 # full machine-readable CLI description
+wakako logout                                   # delete the saved token (only if the user asks)
+wakako skill show                               # print this guide
+wakako skill install [--dest DIR]               # copy this guide to <DIR or ~/.claude/skills>/wakako/SKILL.md
 ```
 
 `SITE` is either `sc-domain:example.com` (domain property) or `https://example.com/`
 (URL-prefix property, trailing slash included). **Always take the exact string from
-`gsc sites`**; a wrong form returns exit code 4.
+`wakako sites`**; a wrong form returns exit code 4.
 
-### `gsc query` options
+### `wakako query` options
 
 | Option | Meaning | Default |
 |---|---|---|
@@ -71,7 +71,7 @@ gsc skill install [--dest DIR]               # copy this guide to <DIR or ~/.cla
 Rows contain one key per dimension plus `clicks`, `impressions`, `ctr` (a fraction, 0.05 =
 5%), `position` (average rank, lower is better).
 
-### `gsc compare` options
+### `wakako compare` options
 
 Same `--dims --days --start --end --filter --type` as `query`, plus:
 
@@ -89,7 +89,7 @@ when the previous value was 0). A row new in this period has `clicks_prev` and
 current `clicks = 0` and `ctr`/`position` = `null`. `position_delta < 0` means the
 ranking improved.
 
-### `gsc inspect` options
+### `wakako inspect` options
 
 | Option | Meaning | Default |
 |---|---|---|
@@ -104,13 +104,13 @@ Common `coverage` values: "Submitted and indexed", "URL is unknown to Google" (n
 discovered), "Crawled - currently not indexed", "Discovered - currently not indexed",
 "Page with redirect", "Duplicate without user-selected canonical".
 
-### Write actions (need `gsc login --write`; exit code 3 otherwise)
+### Write actions (need `wakako login --write`; exit code 3 otherwise)
 
-- `gsc sitemaps SITE --submit URL` submits or resubmits a sitemap so Google refetches it.
+- `wakako sitemaps SITE --submit URL` submits or resubmits a sitemap so Google refetches it.
   This is the officially supported way to tell Google about new URLs.
-- `gsc sitemaps SITE --delete URL --yes` removes a stale sitemap from Search Console
+- `wakako sitemaps SITE --delete URL --yes` removes a stale sitemap from Search Console
   (e.g. one that now 404s). Refuses without `--yes`.
-- `gsc request-indexing URL... [--sitemap URL --site SITE --only-unindexed] [--limit N] [--yes]`
+- `wakako request-indexing URL... [--sitemap URL --site SITE --only-unindexed] [--limit N] [--yes]`
   asks Google to recrawl URLs via the **Indexing API**. **Best-effort and unofficial for
   normal pages**: Google documents that API only for job-posting and livestream pages, so
   it may accept the request and still not index the page. It needs the user to be a
@@ -122,13 +122,13 @@ discovered), "Crawled - currently not indexed", "Discovered - currently not inde
 
 ## Google Analytics 4 (optional)
 
-Not needed for any GSC command. Needs `gsc login --ga` (human) and the GA4 account having
+Not needed for any GSC command. Needs `wakako login --ga` (human) and the GA4 account having
 at least Viewer access. GA4 only (Universal Analytics is gone). Properties are identified
-by a **numeric ID**: get it from `gsc ga properties`, whose `websites` column (the web
-stream URLs) shows which property belongs to which site. If `gsc ga ...` exits 3, the user
-has not granted GA access: ask them to run `gsc login --ga`.
+by a **numeric ID**: get it from `wakako ga properties`, whose `websites` column (the web
+stream URLs) shows which property belongs to which site. If `wakako ga ...` exits 3, the user
+has not granted GA access: ask them to run `wakako login --ga`.
 
-### `gsc ga report PROPERTY` options
+### `wakako ga report PROPERTY` options
 
 | Option | Meaning | Default |
 |---|---|---|
@@ -143,7 +143,7 @@ has not granted GA access: ask them to run `gsc login --ga`.
 Rows have one key per dimension (string) and per metric (number). Names are validated by
 Google: a wrong dimension/metric name returns exit code 1 with the API's message.
 
-### `gsc ga landing-pages SITE --property ID`
+### `wakako ga landing-pages SITE --property ID`
 
 The combined analysis. Joins GSC (page level) with GA organic sessions per landing page, for
 the same dates (GSC's 3-day lag applies; `--days/--start/--end/--limit` as in `query`).
@@ -161,46 +161,46 @@ or tracking quirks; compare pages at similar positions on `engagement_rate` and
 
 ```bash
 # Top queries, last 28 days
-gsc query sc-domain:example.com --dims query --limit 100
+wakako query sc-domain:example.com --dims query --limit 100
 
 # What changed vs the previous 28 days? (biggest movers first)
-gsc compare sc-domain:example.com --dims query --limit 30
-gsc compare sc-domain:example.com --dims page --sort impressions --min-impressions 100
-gsc compare sc-domain:example.com --dims ""            # one totals row
+wakako compare sc-domain:example.com --dims query --limit 30
+wakako compare sc-domain:example.com --dims page --sort impressions --min-impressions 100
+wakako compare sc-domain:example.com --dims ""            # one totals row
 
 # Striking-distance keywords: pull everything, then keep position 8-20 with high impressions
-gsc query sc-domain:example.com --dims query,page --limit 0 --output rows.json
+wakako query sc-domain:example.com --dims query,page --limit 0 --output rows.json
 #   ...then filter rows where 8 <= position <= 20, sort by impressions desc
 
 # Low-CTR pages with real impressions
-gsc query sc-domain:example.com --dims page --limit 0   # keep impressions > 500, ctr < 0.02
+wakako query sc-domain:example.com --dims page --limit 0   # keep impressions > 500, ctr < 0.02
 
 # One section of the site / one page's queries
-gsc query sc-domain:example.com --dims page --filter "page contains /blog/"
-gsc query sc-domain:example.com --dims query --filter "page equals https://example.com/pricing"
+wakako query sc-domain:example.com --dims page --filter "page contains /blog/"
+wakako query sc-domain:example.com --dims query --filter "page equals https://example.com/pricing"
 
 # Daily trend / device split
-gsc query SITE --dims date --days 90 --limit 0
-gsc query SITE --dims device
+wakako query SITE --dims date --days 90 --limit 0
+wakako query SITE --dims device
 
 # (GA) Which property is this site? Then traffic, organic traffic, and the combined view
-gsc ga properties
-gsc ga report 123456789 --dims date --metrics sessions,activeUsers --days 30
-gsc ga report 123456789 --organic --dims landingPage --metrics sessions,engagementRate,keyEvents --limit 50
-gsc ga report 123456789 --dims sessionDefaultChannelGroup --metrics sessions     # traffic by channel
-gsc ga landing-pages sc-domain:example.com --property 123456789 --limit 50
+wakako ga properties
+wakako ga report 123456789 --dims date --metrics sessions,activeUsers --days 30
+wakako ga report 123456789 --organic --dims landingPage --metrics sessions,engagementRate,keyEvents --limit 50
+wakako ga report 123456789 --dims sessionDefaultChannelGroup --metrics sessions     # traffic by channel
+wakako ga landing-pages sc-domain:example.com --property 123456789 --limit 50
 
 # Is this URL indexed? Which URLs in the sitemap are not?
-gsc inspect https://example.com/pricing --site sc-domain:example.com
-gsc inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed
+wakako inspect https://example.com/pricing --site sc-domain:example.com
+wakako inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed
 
 # Get unindexed pages recrawled: dry run first, then send after the user agrees
-gsc request-indexing --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed
-gsc request-indexing --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed --yes
+wakako request-indexing --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed
+wakako request-indexing --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed --yes
 
 # Clean up a dead sitemap and resubmit the live one
-gsc sitemaps SITE --delete https://example.com/old.xml --yes
-gsc sitemaps SITE --submit https://example.com/sitemap.xml
+wakako sitemaps SITE --delete https://example.com/old.xml --yes
+wakako sitemaps SITE --submit https://example.com/sitemap.xml
 ```
 
 ## Gotchas

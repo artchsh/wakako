@@ -3,14 +3,14 @@ import types
 import pytest
 from google.auth.exceptions import RefreshError
 
-from gsc_cli import auth
-from gsc_cli.errors import GscError
+from wakako import auth
+from wakako.errors import WakakoError
 
 
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
     path = tmp_path / "cfg"
-    monkeypatch.setenv("GSC_CONFIG_DIR", str(path))
+    monkeypatch.setenv("WAKAKO_CONFIG_DIR", str(path))
     return path
 
 
@@ -23,17 +23,17 @@ def test_config_dir_env_override(cfg):
 
 
 def test_config_dir_windows(tmp_path, monkeypatch):
-    monkeypatch.delenv("GSC_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("WAKAKO_CONFIG_DIR", raising=False)
     monkeypatch.setattr(auth.sys, "platform", "win32")
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert auth.config_dir() == tmp_path / "gsc-wrapper"
+    assert auth.config_dir() == tmp_path / "wakako"
 
 
 def test_config_dir_posix_uses_xdg(tmp_path, monkeypatch):
-    monkeypatch.delenv("GSC_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("WAKAKO_CONFIG_DIR", raising=False)
     monkeypatch.setattr(auth.sys, "platform", "linux")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    assert auth.config_dir() == tmp_path / "gsc-wrapper"
+    assert auth.config_dir() == tmp_path / "wakako"
 
 
 # ---- login ------------------------------------------------------------------
@@ -81,12 +81,12 @@ def test_login_reuses_saved_client_secret(cfg):
 
 
 def test_login_without_any_client_secret_errors(cfg):
-    with pytest.raises(GscError, match="client secret"):
+    with pytest.raises(WakakoError, match="client secret"):
         auth.login(None)
 
 
 def test_login_missing_file_errors(cfg, tmp_path):
-    with pytest.raises(GscError, match="not found"):
+    with pytest.raises(WakakoError, match="not found"):
         auth.login(tmp_path / "nope.json")
 
 
@@ -94,7 +94,7 @@ def test_login_invalid_client_file_errors(cfg, tmp_path):
     src = tmp_path / "cs.json"
     src.write_text("not json")
     FakeFlow.fail_on_load = True
-    with pytest.raises(GscError, match="valid"):
+    with pytest.raises(WakakoError, match="valid"):
         auth.login(src)
 
 
@@ -132,7 +132,7 @@ def write_token(cfg):
 
 
 def test_get_credentials_not_logged_in(cfg):
-    with pytest.raises(GscError, match="gsc login"):
+    with pytest.raises(WakakoError, match="wakako login"):
         auth.get_credentials()
 
 
@@ -155,21 +155,21 @@ def test_get_credentials_refreshes_and_saves(cfg, monkeypatch):
 def test_get_credentials_refresh_failure_asks_to_login(cfg, monkeypatch):
     write_token(cfg)
     patch_stored(monkeypatch, StoredCreds(valid=False, fail=True))
-    with pytest.raises(GscError, match="gsc login"):
+    with pytest.raises(WakakoError, match="wakako login"):
         auth.get_credentials()
 
 
 def test_get_credentials_without_refresh_token_asks_to_login(cfg, monkeypatch):
     write_token(cfg)
     patch_stored(monkeypatch, StoredCreds(valid=False, refresh_token=None))
-    with pytest.raises(GscError, match="gsc login"):
+    with pytest.raises(WakakoError, match="wakako login"):
         auth.get_credentials()
 
 
 def test_get_credentials_corrupt_token_asks_to_login(cfg, monkeypatch):
     write_token(cfg)
     patch_stored(monkeypatch, error=ValueError("corrupt"))
-    with pytest.raises(GscError, match="gsc login"):
+    with pytest.raises(WakakoError, match="wakako login"):
         auth.get_credentials()
 
 
@@ -197,3 +197,23 @@ def test_get_service_builds_searchconsole_v1(cfg, monkeypatch):
     assert auth.get_service() == "service"
     assert seen == {"name": "searchconsole", "version": "v1",
                     "credentials": creds, "cache_discovery": False}
+
+
+def test_legacy_env_var_still_works(tmp_path, monkeypatch):
+    monkeypatch.delenv("WAKAKO_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("GSC_CONFIG_DIR", str(tmp_path / "old-env"))
+    assert auth.config_dir() == tmp_path / "old-env"
+    monkeypatch.setenv("WAKAKO_CONFIG_DIR", str(tmp_path / "new-env"))
+    assert auth.config_dir() == tmp_path / "new-env"  # new variable wins
+
+
+def test_existing_gsc_wrapper_folder_is_kept_so_logins_survive(tmp_path, monkeypatch):
+    monkeypatch.delenv("WAKAKO_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("GSC_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(auth.sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    assert auth.config_dir() == tmp_path / "wakako"  # fresh install
+    (tmp_path / "gsc-wrapper").mkdir()
+    assert auth.config_dir() == tmp_path / "gsc-wrapper"  # pre-rename install keeps working
+    (tmp_path / "wakako").mkdir()
+    assert auth.config_dir() == tmp_path / "wakako"  # once the new folder exists it wins

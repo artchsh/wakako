@@ -4,8 +4,8 @@ import httplib2
 import pytest
 from googleapiclient.errors import HttpError
 
-from gsc_cli import client
-from gsc_cli.errors import AuthError, QuotaError, UsageError
+from wakako import client
+from wakako.errors import AuthError, QuotaError, UsageError
 
 
 class FakeRequest:
@@ -287,14 +287,14 @@ def test_missing_write_scope_points_to_login_write():
                                      "details": [{"reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}})
     with pytest.raises(AuthError) as exc:
         client.execute(FakeRequest(err))
-    assert exc.value.exit_code == 3 and "gsc login --write" in exc.value.hint
+    assert exc.value.exit_code == 3 and "wakako login --write" in exc.value.hint
     with pytest.raises(AuthError) as ga_exc:
         client.execute(FakeRequest(err), login_flag="--ga")
-    assert "gsc login --ga" in ga_exc.value.hint
+    assert "wakako login --ga" in ga_exc.value.hint
 
 
 def test_api_not_enabled_gets_an_enable_it_hint_not_a_property_hint():
-    from gsc_cli.errors import PermissionDenied
+    from wakako.errors import PermissionDenied
 
     err = http_error(403, {"error": {
         "message": "Google Analytics Admin API has not been used in project 1 before or it is disabled. "
@@ -307,7 +307,7 @@ def test_api_not_enabled_gets_an_enable_it_hint_not_a_property_hint():
 
 
 def test_plain_403_is_still_permission_denied():
-    from gsc_cli.errors import PermissionDenied
+    from wakako.errors import PermissionDenied
 
     with pytest.raises(PermissionDenied):
         client.execute(FakeRequest(http_error(403, {"error": {"message": "no access"}})), site="s")

@@ -2,9 +2,9 @@ import json
 
 from typer.testing import CliRunner
 
-from gsc_cli import auth, client
-from gsc_cli.cli import app
-from gsc_cli.errors import AuthError
+from wakako import auth, client
+from wakako.cli import app
+from wakako.errors import AuthError
 
 runner = CliRunner()
 SITE = "sc-domain:x.com"
@@ -142,12 +142,12 @@ def test_sitemaps_missing_write_scope_exits_3(monkeypatch):
 
     def scope_error(*a):
         raise AuthError("Missing permission scope for this action (403).",
-                        hint="Run `gsc login --write` (human step).")
+                        hint="Run `wakako login --write` (human step).")
 
     monkeypatch.setattr(client, "submit_sitemap", scope_error)
     result = runner.invoke(app, ["sitemaps", SITE, "--submit", "https://x.com/s.xml"])
     assert result.exit_code == 3
-    assert "gsc login --write" in json.loads(result.output)["error"]["hint"]
+    assert "wakako login --write" in json.loads(result.output)["error"]["hint"]
 
 
 # ---- request-indexing -------------------------------------------------------------------

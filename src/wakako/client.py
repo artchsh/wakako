@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 import requests
 from googleapiclient.errors import HttpError
 
-from gsc_cli.errors import AuthError, GscError, PermissionDenied, QuotaError, UsageError
+from wakako.errors import AuthError, WakakoError, PermissionDenied, QuotaError, UsageError
 
 DATA_LAG_DAYS = 3
 ROW_LIMIT = 25000
@@ -153,7 +153,7 @@ def execute(
             if status == 403 and _needs_write_scope(e):
                 raise AuthError(
                     "Missing permission scope for this action (403).",
-                    hint=f"Run `gsc login {login_flag}` (human step: browser sign-in) to grant access.",
+                    hint=f"Run `wakako login {login_flag}` (human step: browser sign-in) to grant access.",
                 ) from e
             if status == 403 and _api_disabled(e):
                 raise PermissionDenied(
@@ -165,10 +165,10 @@ def execute(
                 target = f"No access to {site}" if site else "Permission denied"
                 raise PermissionDenied(
                     f"{target} (403): {_reason(e).rstrip('.')}.",
-                    hint=permission_hint or "Check the exact property string with `gsc sites` "
+                    hint=permission_hint or "Check the exact property string with `wakako sites` "
                     "and that you are logged in as the right Google account.",
                 ) from e
-            raise GscError(f"Google API error {status}: {_reason(e)}") from e
+            raise WakakoError(f"Google API error {status}: {_reason(e)}") from e
 
 
 def query_rows(
@@ -248,7 +248,7 @@ def inspect_url(service, site: str, url: str) -> list[dict]:
 
 def _http_get(url: str) -> str:
     try:
-        response = requests.get(url, timeout=20, headers={"User-Agent": "gsc-wrapper"})
+        response = requests.get(url, timeout=20, headers={"User-Agent": "wakako"})
         response.raise_for_status()
     except requests.RequestException as e:
         raise UsageError(f"Could not fetch {url}: {e}") from None
@@ -304,7 +304,7 @@ def inspect_many(
         except QuotaError as e:
             stop.set()
             return {"url": url, **blank, "error": str(e)}, True
-        except GscError as e:
+        except WakakoError as e:
             return {"url": url, **blank, "error": str(e)}, False
 
     rows: list[dict] = []
@@ -375,7 +375,7 @@ def compare_rows(
     return rows[:limit] if limit > 0 else rows
 
 
-# ---- write actions (need `gsc login --write`) --------------------------------
+# ---- write actions (need `wakako login --write`) --------------------------------
 
 def submit_sitemap(service, site: str, sitemap_url: str) -> list[dict]:
     execute(service.sitemaps().submit(siteUrl=site, feedpath=sitemap_url), site=site)
@@ -400,7 +400,7 @@ def request_indexing(indexing_service, urls: list[str]) -> list[dict]:
         except (QuotaError, AuthError) as e:
             rows.append({"url": url, "status": "error", "detail": str(e)})
             break
-        except GscError as e:
+        except WakakoError as e:
             rows.append({"url": url, "status": "error", "detail": str(e)})
             continue
         notified = (response or {}).get("urlNotificationMetadata", {}).get("latestUpdate", {})

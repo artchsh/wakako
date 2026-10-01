@@ -2,9 +2,9 @@ import json
 
 from typer.testing import CliRunner
 
-from gsc_cli import auth, client, doctor
-from gsc_cli.cli import app
-from gsc_cli.errors import PermissionDenied, QuotaError
+from wakako import auth, client, doctor
+from wakako.cli import app
+from wakako.errors import PermissionDenied, QuotaError
 
 runner = CliRunner()
 
@@ -78,12 +78,12 @@ def test_query_invalid_format_fails_before_calling_api(monkeypatch):
 
 
 def test_not_logged_in_exits_3_pointing_to_login(tmp_path, monkeypatch):
-    monkeypatch.setenv("GSC_CONFIG_DIR", str(tmp_path / "empty"))
+    monkeypatch.setenv("WAKAKO_CONFIG_DIR", str(tmp_path / "empty"))
     result = runner.invoke(app, ["sites"])
     assert result.exit_code == 3
     err = json.loads(result.output)["error"]
     assert err["code"] == "auth"
-    assert "gsc login" in err["message"]
+    assert "wakako login" in err["message"]
     assert "human" in err["hint"]
 
 
@@ -91,7 +91,7 @@ def test_api_error_is_shown_without_traceback(monkeypatch):
     monkeypatch.setattr(auth, "get_service", lambda: "svc")
 
     def denied(svc):
-        raise PermissionDenied("No access to sc-domain:x.com (403)", hint="check gsc sites")
+        raise PermissionDenied("No access to sc-domain:x.com (403)", hint="check wakako sites")
 
     monkeypatch.setattr(client, "list_sites", denied)
     result = runner.invoke(app, ["sites"])
@@ -130,7 +130,7 @@ def test_inspect_requires_site_and_passes_args(monkeypatch):
 
 def test_login_passes_client_secret_path(monkeypatch, tmp_path):
     seen = {}
-    monkeypatch.setenv("GSC_CONFIG_DIR", str(tmp_path / "cfg"))  # hermetic: no real token
+    monkeypatch.setenv("WAKAKO_CONFIG_DIR", str(tmp_path / "cfg"))  # hermetic: no real token
 
     def fake_login(path, write=False, ga=False):
         seen.update(path=path, write=write, ga=ga)
@@ -215,21 +215,21 @@ def test_doctor_failure_exits_3(monkeypatch):
 def test_skill_show_prints_guide():
     result = runner.invoke(app, ["skill", "show"])
     assert result.exit_code == 0
-    assert result.output.startswith("---\nname: gsc")
+    assert result.output.startswith("---\nname: wakako")
 
 
 def test_skill_install_writes_file(tmp_path):
     result = runner.invoke(app, ["skill", "install", "--dest", str(tmp_path)])
     assert result.exit_code == 0, result.output
-    installed = (tmp_path / "gsc" / "SKILL.md").read_text(encoding="utf-8")
-    assert installed.startswith("---\nname: gsc")
+    installed = (tmp_path / "wakako" / "SKILL.md").read_text(encoding="utf-8")
+    assert installed.startswith("---\nname: wakako")
 
 
 def test_skill_mentions_every_command_and_flag():
     guide = runner.invoke(app, ["skill", "show"]).output
     doc = json.loads(runner.invoke(app, ["commands"]).output)
     for command in doc["commands"]:
-        assert f"gsc {command['name']}" in guide, command["name"]
+        assert f"wakako {command['name']}" in guide, command["name"]
     for command in doc["commands"]:
         for param in command["params"]:
             for flag in param.get("flags", []):

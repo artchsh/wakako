@@ -10,29 +10,33 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from gsc_cli.errors import AuthError, UsageError
+from wakako.errors import AuthError, UsageError
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
-# Opt-in via `gsc login --write`: manage sitemaps + Indexing API (request indexing).
+# Opt-in via `wakako login --write`: manage sitemaps + Indexing API (request indexing).
 SCOPES_WRITE = [
     "https://www.googleapis.com/auth/webmasters",
     "https://www.googleapis.com/auth/indexing",
 ]
-# Opt-in via `gsc login --ga`: read Google Analytics 4 (Data + Admin APIs).
+# Opt-in via `wakako login --ga`: read Google Analytics 4 (Data + Admin APIs).
 GA_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
-NOT_LOGGED_IN = "Not logged in or session expired - run `gsc login`."
-LOGIN_HINT = "`gsc login` opens a browser and needs a human; an agent cannot complete it."
+NOT_LOGGED_IN = "Not logged in or session expired - run `wakako login`."
+LOGIN_HINT = "`wakako login` opens a browser and needs a human; an agent cannot complete it."
 
 
 def config_dir() -> Path:
-    override = os.environ.get("GSC_CONFIG_DIR")
+    """`WAKAKO_CONFIG_DIR` (or the old `GSC_CONFIG_DIR`), else the per-user config folder.
+    Installs from before the rename keep using their existing `gsc-wrapper` folder, so a
+    saved login survives; nothing is moved or copied automatically."""
+    override = os.environ.get("WAKAKO_CONFIG_DIR") or os.environ.get("GSC_CONFIG_DIR")
     if override:
         return Path(override)
     if sys.platform == "win32":
-        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        return Path(base) / "gsc-wrapper"
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "gsc-wrapper"
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    current, legacy = base / "wakako", base / "gsc-wrapper"
+    return legacy if legacy.exists() and not current.exists() else current
 
 
 def client_secret_file() -> Path:
@@ -45,7 +49,7 @@ def token_file() -> Path:
 
 def requested_scopes(write: bool = False, ga: bool = False) -> list[str]:
     """Scopes to request at login: what was asked for plus anything already granted, so a
-    later `gsc login --ga` never silently drops write access (and vice versa)."""
+    later `wakako login --ga` never silently drops write access (and vice versa)."""
     granted = set(granted_scopes())
     wanted = list(SCOPES_WRITE if (write or set(SCOPES_WRITE) <= granted) else SCOPES)
     if ga or GA_SCOPE in granted:
@@ -65,7 +69,7 @@ def login(
     elif not client_secret_file().is_file():
         raise UsageError(
             "No OAuth client secret saved yet. Run "
-            "`gsc login --client-secret path/to/client_secret.json` "
+            "`wakako login --client-secret path/to/client_secret.json` "
             "(see README for how to create one)."
         )
 
@@ -135,7 +139,7 @@ def _ga_credentials():
     if GA_SCOPE not in granted_scopes():
         raise AuthError(
             "Google Analytics access has not been granted.",
-            hint="Run `gsc login --ga` (human step: browser sign-in). Also enable the "
+            hint="Run `wakako login --ga` (human step: browser sign-in). Also enable the "
             "'Google Analytics Data API' and 'Google Analytics Admin API' in your GCP project.",
         )
     return creds

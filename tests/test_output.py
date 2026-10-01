@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from gsc_cli import output
-from gsc_cli.errors import GscError
+from wakako import output
+from wakako.errors import WakakoError
 
 ROWS = [
     {"query": "shoes", "clicks": 3, "ctr": 0.034567, "position": 12.0},
@@ -43,9 +43,9 @@ def test_json_empty_is_empty_list():
 
 
 def test_invalid_format_raises():
-    with pytest.raises(GscError, match="table, json, csv"):
+    with pytest.raises(WakakoError, match="table, json, csv"):
         output.format_rows(ROWS, "xml")
-    with pytest.raises(GscError):
+    with pytest.raises(WakakoError):
         output.check_format("xml")
 
 
@@ -62,7 +62,7 @@ def test_emit_prints_to_stdout(capsys):
 
 def test_resolve_format_explicit_wins():
     assert output.resolve_format("csv") == "csv"
-    with pytest.raises(GscError):
+    with pytest.raises(WakakoError):
         output.resolve_format("xml")
 
 

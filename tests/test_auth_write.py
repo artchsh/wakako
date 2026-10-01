@@ -3,13 +3,13 @@ import types
 
 import pytest
 
-from gsc_cli import auth
+from wakako import auth
 
 
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
     path = tmp_path / "cfg"
-    monkeypatch.setenv("GSC_CONFIG_DIR", str(path))
+    monkeypatch.setenv("WAKAKO_CONFIG_DIR", str(path))
     return path
 
 
@@ -135,13 +135,13 @@ def _logged_in_with(cfg, monkeypatch, scopes):
 
 
 def test_ga_services_refuse_without_ga_scope(cfg, monkeypatch):
-    from gsc_cli.errors import AuthError
+    from wakako.errors import AuthError
 
     _logged_in_with(cfg, monkeypatch, list(auth.SCOPES))
     for getter in (auth.get_analytics_data_service, auth.get_analytics_admin_service):
         with pytest.raises(AuthError) as exc:
             getter()
-        assert "gsc login --ga" in exc.value.hint
+        assert "wakako login --ga" in exc.value.hint
 
 
 def test_ga_services_build_data_and_admin_v1beta(cfg, monkeypatch):

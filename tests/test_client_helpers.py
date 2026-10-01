@@ -2,8 +2,8 @@ from datetime import date
 
 import pytest
 
-from gsc_cli import client
-from gsc_cli.errors import GscError
+from wakako import client
+from wakako.errors import WakakoError
 
 TODAY = date(2026, 10, 1)
 
@@ -24,19 +24,19 @@ def test_date_range_explicit_start_end():
 
 
 def test_date_range_requires_both_start_and_end():
-    with pytest.raises(GscError, match="both"):
+    with pytest.raises(WakakoError, match="both"):
         client.date_range(28, "2026-08-01", None, today=TODAY)
 
 
 def test_date_range_rejects_bad_dates_and_order():
-    with pytest.raises(GscError, match="YYYY-MM-DD"):
+    with pytest.raises(WakakoError, match="YYYY-MM-DD"):
         client.date_range(28, "08/01/2026", "2026-08-31", today=TODAY)
-    with pytest.raises(GscError, match="before"):
+    with pytest.raises(WakakoError, match="before"):
         client.date_range(28, "2026-09-01", "2026-08-01", today=TODAY)
 
 
 def test_date_range_rejects_non_positive_days():
-    with pytest.raises(GscError, match="--days"):
+    with pytest.raises(WakakoError, match="--days"):
         client.date_range(0, None, None, today=TODAY)
 
 
@@ -46,7 +46,7 @@ def test_parse_dims():
 
 
 def test_parse_dims_rejects_unknown():
-    with pytest.raises(GscError, match="bogus"):
+    with pytest.raises(WakakoError, match="bogus"):
         client.parse_dims("query,bogus")
 
 
@@ -66,13 +66,13 @@ def test_parse_filter_operator_is_case_insensitive():
     "bad", ["page contains", "nope contains x", "page like x", ""]
 )
 def test_parse_filter_rejects_invalid(bad):
-    with pytest.raises(GscError, match="filter"):
+    with pytest.raises(WakakoError, match="filter"):
         client.parse_filter(bad)
 
 
 def test_validate_search_type():
     assert client.validate_search_type("image") == "image"
-    with pytest.raises(GscError, match="web"):
+    with pytest.raises(WakakoError, match="web"):
         client.validate_search_type("tv")
 
 

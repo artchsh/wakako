@@ -2,9 +2,9 @@ import json
 
 from typer.testing import CliRunner
 
-from gsc_cli import auth, client, ga
-from gsc_cli.cli import app
-from gsc_cli.errors import AuthError
+from wakako import auth, client, ga
+from wakako.cli import app
+from wakako.errors import AuthError
 
 runner = CliRunner()
 
@@ -69,7 +69,7 @@ def test_ga_not_granted_exits_3_with_login_hint(tmp_path, monkeypatch):
     cfg = tmp_path / "cfg"
     cfg.mkdir()
     (cfg / "token.json").write_text(json.dumps({"scopes": list(auth.SCOPES)}))
-    monkeypatch.setenv("GSC_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("WAKAKO_CONFIG_DIR", str(cfg))
 
     class Creds:
         valid = True
@@ -79,7 +79,7 @@ def test_ga_not_granted_exits_3_with_login_hint(tmp_path, monkeypatch):
     result = runner.invoke(app, ["ga", "properties"])
     assert result.exit_code == 3
     err = json.loads(result.output)["error"]
-    assert err["code"] == "auth" and "gsc login --ga" in err["hint"]
+    assert err["code"] == "auth" and "wakako login --ga" in err["hint"]
 
 
 def test_ga_landing_pages(monkeypatch):

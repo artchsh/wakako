@@ -1,8 +1,8 @@
 import threading
 import time
 
-from gsc_cli import client
-from gsc_cli.errors import QuotaError
+from wakako import client
+from wakako.errors import QuotaError
 
 
 class FakeRequest:

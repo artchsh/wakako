@@ -1,13 +1,13 @@
-# gsc-wrapper
+# Wakako
 
 Google Search Console from the command line, using your personal Google account
 (OAuth — no service accounts). Read-only by default; write actions are opt-in.
 
-## Install (standalone, global `gsc` command)
+## Install (standalone, global `wakako` command)
 
 ```bash
 uv tool install .            # or: pipx install .
-gsc skill install            # optional: teach Claude Code to use it (~/.claude/skills/gsc)
+wakako skill install            # optional: teach Claude Code to use it (~/.claude/skills/wakako)
 ```
 
 After pulling changes, reinstall with `uv tool install --force .`.
@@ -27,22 +27,22 @@ After pulling changes, reinstall with `uv tool install --force .`.
 ## Use
 
 ```bash
-gsc login --client-secret path/to/client_secret.json   # opens your browser once
-gsc sites
-gsc query sc-domain:example.com --dims query,page --days 28 --limit 50
-gsc query https://example.com/ --dims page --filter "page contains /blog" --format csv --output blog.csv
-gsc compare sc-domain:example.com --dims query --limit 20      # this period vs the one before
-gsc inspect https://example.com/some-page --site sc-domain:example.com
-gsc inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed
-gsc sitemaps sc-domain:example.com
-gsc logout
+wakako login --client-secret path/to/client_secret.json   # opens your browser once
+wakako sites
+wakako query sc-domain:example.com --dims query,page --days 28 --limit 50
+wakako query https://example.com/ --dims page --filter "page contains /blog" --format csv --output blog.csv
+wakako compare sc-domain:example.com --dims query --limit 20      # this period vs the one before
+wakako inspect https://example.com/some-page --site sc-domain:example.com
+wakako inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed
+wakako sitemaps sc-domain:example.com
+wakako logout
 ```
 
-`gsc compare` compares the latest `--days` (default 28) with the same-length period right
+`wakako compare` compares the latest `--days` (default 28) with the same-length period right
 before it and gives each row `clicks`, `clicks_prev`, `clicks_delta`, `clicks_pct` (and the
 same for impressions, ctr, position), biggest movers first (`--sort`, `--min-impressions`).
 
-`gsc inspect --sitemap` inspects every URL in a sitemap (sitemap indexes are followed),
+`wakako inspect --sitemap` inspects every URL in a sitemap (sitemap indexes are followed),
 4 at a time, and returns one row per URL; `--only-unindexed` keeps just the ones Google
 has not indexed. URL Inspection quota is about 2,000 URLs per property per day.
 
@@ -53,20 +53,20 @@ view:
 
 1. In the same GCP project, enable the **Google Analytics Data API** and the
    **Google Analytics Admin API** (APIs & Services > Library).
-2. `gsc login --ga` (a human step; combine with `--write` if you want both). Your Google
+2. `wakako login --ga` (a human step; combine with `--write` if you want both). Your Google
    account needs at least Viewer access on the GA4 property. Later logins keep whatever you
-   already granted; `gsc logout` first if you want to start from scratch.
+   already granted; `wakako logout` first if you want to start from scratch.
 
 ```bash
-gsc ga properties                                   # numeric property IDs + their website URLs
-gsc ga report 123456789 --dims date --metrics sessions,activeUsers
-gsc ga report 123456789 --organic --dims landingPage --metrics sessions,engagementRate,keyEvents --limit 50
-gsc ga landing-pages sc-domain:example.com --property 123456789 --limit 50
+wakako ga properties                                   # numeric property IDs + their website URLs
+wakako ga report 123456789 --dims date --metrics sessions,activeUsers
+wakako ga report 123456789 --organic --dims landingPage --metrics sessions,engagementRate,keyEvents --limit 50
+wakako ga landing-pages sc-domain:example.com --property 123456789 --limit 50
 ```
 
-`gsc ga landing-pages` lines up each page's search clicks, impressions and position from
+`wakako ga landing-pages` lines up each page's search clicks, impressions and position from
 Search Console with its organic sessions, engagement rate and key events from Analytics.
-`gsc doctor` shows whether GA access has been granted (`ga_access`).
+`wakako doctor` shows whether GA access has been granted (`ga_access`).
 
 ## Write actions (optional, opt-in)
 
@@ -74,12 +74,12 @@ Everything above is read-only. To also **submit/delete sitemaps** and **request 
 log in once more with write access (a human step; it replaces the saved token):
 
 ```bash
-gsc login --write
-gsc sitemaps sc-domain:example.com --submit https://example.com/sitemap.xml
-gsc sitemaps sc-domain:example.com --delete https://example.com/old-sitemap.xml --yes
-gsc request-indexing https://example.com/new-post                   # dry run: lists what would be sent
-gsc request-indexing https://example.com/new-post --yes             # actually send
-gsc request-indexing --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed --yes
+wakako login --write
+wakako sitemaps sc-domain:example.com --submit https://example.com/sitemap.xml
+wakako sitemaps sc-domain:example.com --delete https://example.com/old-sitemap.xml --yes
+wakako request-indexing https://example.com/new-post                   # dry run: lists what would be sent
+wakako request-indexing https://example.com/new-post --yes             # actually send
+wakako request-indexing --sitemap https://example.com/sitemap.xml --site sc-domain:example.com --only-unindexed --yes
 ```
 
 **About `request-indexing`:** Google has no public API for the "Request indexing" button in
@@ -90,15 +90,17 @@ It also needs:
 
 1. You to be a verified **owner** of the property (full-user access is not enough).
 2. The **Web Search Indexing API** enabled in your GCP project (APIs & Services > Library).
-3. `gsc login --write`. The default quota is about 200 URLs per day.
+3. `wakako login --write`. The default quota is about 200 URLs per day.
 
 Without `--yes`, `request-indexing` and `sitemaps --delete` change nothing.
 
 `--format table|json|csv` and `--output FILE` work on every data command.
 Search Analytics data lags by ~3 days, so `--days` counts back from 3 days ago.
 
-Credentials live in `%APPDATA%\gsc-wrapper` (Windows) or `~/.config/gsc-wrapper`
-(elsewhere). Override with `GSC_CONFIG_DIR`.
+Credentials live in `%APPDATA%\wakako` (Windows) or `~/.config/wakako` (elsewhere).
+Override with `WAKAKO_CONFIG_DIR`. If you used this tool before it was renamed, it keeps
+using your existing `gsc-wrapper` folder, so you stay logged in; rename that folder to
+`wakako` whenever you like.
 
 ## For AI agents
 
@@ -107,10 +109,10 @@ The tool is built to be driven by an agent:
 - Output is **JSON by default when piped** (table in a terminal); `--format table|json|csv`
   overrides. Errors are one JSON object on stderr: `{"error": {"code", "message", "hint"}}`.
 - Typed exit codes: `0` ok, `2` usage, `3` not logged in, `4` no permission, `5` quota.
-- `gsc doctor` checks setup without prompting; `gsc commands` prints every command, option,
-  valid value and exit code as JSON; `gsc skill show` prints the full usage guide
-  (`src/gsc_cli/skill/SKILL.md`), which `gsc skill install` copies into Claude Code skills.
-- `gsc login` is the only step that needs a human (browser sign-in).
+- `wakako doctor` checks setup without prompting; `wakako commands` prints every command, option,
+  valid value and exit code as JSON; `wakako skill show` prints the full usage guide
+  (`src/wakako/skill/SKILL.md`), which `wakako skill install` copies into Claude Code skills.
+- `wakako login` is the only step that needs a human (browser sign-in).
 
 ## Development
 

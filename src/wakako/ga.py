@@ -1,19 +1,19 @@
 """Google Analytics 4 (optional): properties, reports, and GSC+GA landing-page analysis.
 
-Everything here needs `gsc login --ga`; GSC-only users never import a GA API.
+Everything here needs `wakako login --ga`; GSC-only users never import a GA API.
 """
 
 import re
 from datetime import date, timedelta
 from urllib.parse import unquote, urlsplit
 
-from gsc_cli import client
-from gsc_cli.client import execute
-from gsc_cli.errors import GscError, UsageError
+from wakako import client
+from wakako.client import execute
+from wakako.errors import WakakoError, UsageError
 
 PAGE_SIZE = 100000
 GA_PERMISSION_HINT = (
-    "Check the property ID with `gsc ga properties` and that your Google account has at "
+    "Check the property ID with `wakako ga properties` and that your Google account has at "
     "least Viewer access to that GA4 property."
 )
 OPERATORS = ("equals", "notEquals", "contains", "notContains", "beginsWith", "endsWith", "regex", "notRegex")
@@ -37,7 +37,7 @@ def normalize_property(value: str) -> str:
     number = raw[len("properties/"):] if raw.startswith("properties/") else raw
     if not number.isdigit():
         raise UsageError(
-            f"Invalid GA4 property '{value}'. Use the numeric ID from `gsc ga properties` "
+            f"Invalid GA4 property '{value}'. Use the numeric ID from `wakako ga properties` "
             "(e.g. 123456789)."
         )
     return f"properties/{number}"
@@ -198,7 +198,7 @@ def list_properties(admin_service, include_streams: bool = True) -> list[dict]:
                     admin_service.properties().dataStreams().list(parent=f"properties/{row['property']}"),
                     login_flag="--ga",
                 ).get("dataStreams", [])
-            except GscError:
+            except WakakoError:
                 continue
             uris = {s.get("webStreamData", {}).get("defaultUri", "") for s in streams
                     if s.get("type") == "WEB_DATA_STREAM"}

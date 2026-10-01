@@ -1,13 +1,13 @@
 import pytest
 
-from gsc_cli import auth, client, doctor
-from gsc_cli.errors import AuthError, PermissionDenied
+from wakako import auth, client, doctor
+from wakako.errors import AuthError, PermissionDenied
 
 
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
     path = tmp_path / "cfg"
-    monkeypatch.setenv("GSC_CONFIG_DIR", str(path))
+    monkeypatch.setenv("WAKAKO_CONFIG_DIR", str(path))
     return path
 
 
@@ -38,7 +38,7 @@ def test_expired_login(cfg, monkeypatch):
     (cfg / "token.json").write_text("{}")
 
     def expired():
-        raise AuthError("Not logged in or session expired - run `gsc login`.")
+        raise AuthError("Not logged in or session expired - run `wakako login`.")
 
     monkeypatch.setattr(auth, "get_service", expired)
     rows = by_check(doctor.run_checks())

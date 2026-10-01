@@ -8,14 +8,15 @@ from typing import Annotated, Optional
 
 import typer
 
-from gsc_cli import auth, client, doctor, ga, introspect, output
-from gsc_cli.errors import AuthError, GscError, UsageError
+from wakako import auth, client, doctor, ga, introspect, output
+from wakako.errors import AuthError, WakakoError, UsageError
 
 app = typer.Typer(
+    name="wakako",
     help=(
-        "Google Search Console from the command line (personal-account OAuth).\n\n"
+        "Wakako: Google Search Console + Analytics from the command line (personal-account OAuth).\n\n"
         "Agents: output is JSON when piped, errors are JSON on stderr, exit codes are "
-        "typed. Run `gsc skill show` for the usage guide and `gsc commands` for a "
+        "typed. Run `wakako skill show` for the usage guide and `wakako commands` for a "
         "machine-readable description of every command."
     ),
     no_args_is_help=True,
@@ -24,7 +25,7 @@ app = typer.Typer(
 skill_app = typer.Typer(help="The agent usage guide (SKILL.md) bundled with this tool.", no_args_is_help=True)
 app.add_typer(skill_app, name="skill")
 ga_app = typer.Typer(
-    help="Optional Google Analytics 4 commands. Need `gsc login --ga`; GSC works without it.",
+    help="Optional Google Analytics 4 commands. Need `wakako login --ga`; GSC works without it.",
     no_args_is_help=True,
 )
 app.add_typer(ga_app, name="ga")
@@ -41,8 +42,8 @@ YesOpt = Annotated[
 ]
 
 
-def _report(e: GscError) -> None:
-    if sys.stderr.isatty() and not os.environ.get("GSC_JSON_ERRORS"):
+def _report(e: WakakoError) -> None:
+    if sys.stderr.isatty() and not os.environ.get("WAKAKO_JSON_ERRORS") or os.environ.get("GSC_JSON_ERRORS"):
         typer.secho(f"Error: {e}", fg=typer.colors.RED, err=True)
         if e.hint:
             typer.echo(f"Hint: {e.hint}", err=True)
@@ -52,13 +53,13 @@ def _report(e: GscError) -> None:
 
 
 def guarded(fn):
-    """Report a GscError (JSON when not at a terminal) and exit with its typed code."""
+    """Report a WakakoError (JSON when not at a terminal) and exit with its typed code."""
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except GscError as e:
+        except WakakoError as e:
             _report(e)
             raise typer.Exit(e.exit_code)
 
@@ -93,7 +94,7 @@ def login(
     ] = False,
     ga_access: Annotated[
         bool,
-        typer.Option("--ga", help="Also grant read access to Google Analytics 4 (`gsc ga ...`)."),
+        typer.Option("--ga", help="Also grant read access to Google Analytics 4 (`wakako ga ...`)."),
     ] = False,
 ):
     """Log in with your Google account in the browser (human step)."""
@@ -115,7 +116,7 @@ def logout():
         typer.echo("Not logged in.")
 
 
-@app.command("doctor", epilog="Example: gsc doctor")
+@app.command("doctor", epilog="Example: wakako doctor")
 @guarded
 def doctor_cmd(fmt: FormatOpt = None, output_path: OutputOpt = None):
     """Check setup (client secret, login, API access) without prompting. Exit 3 if not ready."""
@@ -126,14 +127,14 @@ def doctor_cmd(fmt: FormatOpt = None, output_path: OutputOpt = None):
         raise typer.Exit(AuthError.exit_code)
 
 
-@app.command("commands", epilog="Always prints JSON. Example: gsc commands")
+@app.command("commands", epilog="Always prints JSON. Example: wakako commands")
 @guarded
 def commands_cmd():
     """Describe every command, option, valid value and exit code as JSON."""
     typer.echo(json.dumps(introspect.describe(app), indent=2))
 
 
-@app.command(epilog="Example: gsc sites --format json")
+@app.command(epilog="Example: wakako sites --format json")
 @guarded
 def sites(fmt: FormatOpt = None, output_path: OutputOpt = None):
     """List Search Console properties and your permission level."""
@@ -143,14 +144,14 @@ def sites(fmt: FormatOpt = None, output_path: OutputOpt = None):
 
 @app.command(
     epilog=(
-        'Examples: gsc query sc-domain:example.com --dims query,page --days 28 --limit 50 | '
-        'gsc query https://example.com/ --dims page --filter "page contains /blog" '
+        'Examples: wakako query sc-domain:example.com --dims query,page --days 28 --limit 50 | '
+        'wakako query https://example.com/ --dims page --filter "page contains /blog" '
         "--format csv --output blog.csv"
     )
 )
 @guarded
 def query(
-    site: Annotated[str, typer.Argument(help="sc-domain:example.com or https://example.com/ (exact string from `gsc sites`)")],
+    site: Annotated[str, typer.Argument(help="sc-domain:example.com or https://example.com/ (exact string from `wakako sites`)")],
     dims: Annotated[str, typer.Option("--dims", help="Comma-separated: query,page,country,device,date")] = "query",
     days: Annotated[int, typer.Option("--days", help="Days back from the latest available date.")] = 28,
     start: Annotated[Optional[str], typer.Option("--start", help="YYYY-MM-DD (use with --end).")] = None,
@@ -179,8 +180,8 @@ def query(
 
 @app.command(
     epilog=(
-        "Examples: gsc compare sc-domain:example.com --dims query --sort clicks --limit 20 | "
-        "gsc compare sc-domain:example.com --dims page --days 7 --min-impressions 100"
+        "Examples: wakako compare sc-domain:example.com --dims query --sort clicks --limit 20 | "
+        "wakako compare sc-domain:example.com --dims page --days 7 --min-impressions 100"
     )
 )
 @guarded
@@ -217,8 +218,8 @@ def compare(
 
 @app.command(
     epilog=(
-        "Examples: gsc inspect https://example.com/a --site sc-domain:example.com | "
-        "gsc inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com "
+        "Examples: wakako inspect https://example.com/a --site sc-domain:example.com | "
+        "wakako inspect --sitemap https://example.com/sitemap.xml --site sc-domain:example.com "
         "--only-unindexed"
     )
 )
@@ -255,16 +256,16 @@ def inspect(
 
 @app.command(
     epilog=(
-        "Examples: gsc sitemaps sc-domain:example.com | "
-        "gsc sitemaps sc-domain:example.com --submit https://example.com/sitemap.xml | "
-        "gsc sitemaps sc-domain:example.com --delete https://example.com/old.xml --yes"
+        "Examples: wakako sitemaps sc-domain:example.com | "
+        "wakako sitemaps sc-domain:example.com --submit https://example.com/sitemap.xml | "
+        "wakako sitemaps sc-domain:example.com --delete https://example.com/old.xml --yes"
     )
 )
 @guarded
 def sitemaps(
     site: Annotated[str, typer.Argument(help="sc-domain:example.com or https://example.com/")],
-    submit: Annotated[Optional[str], typer.Option("--submit", help="Submit or resubmit this sitemap URL (needs `gsc login --write`).")] = None,
-    delete: Annotated[Optional[str], typer.Option("--delete", help="Remove this sitemap from Search Console (needs --yes and `gsc login --write`).")] = None,
+    submit: Annotated[Optional[str], typer.Option("--submit", help="Submit or resubmit this sitemap URL (needs `wakako login --write`).")] = None,
+    delete: Annotated[Optional[str], typer.Option("--delete", help="Remove this sitemap from Search Console (needs --yes and `wakako login --write`).")] = None,
     yes: YesOpt = False,
     fmt: FormatOpt = None,
     output_path: OutputOpt = None,
@@ -290,9 +291,9 @@ def sitemaps(
     epilog=(
         "Best-effort: Google documents the Indexing API only for job-posting and livestream pages, "
         "so it may ignore other URLs. Needs property OWNER access, the Web Search Indexing API "
-        "enabled in your GCP project, and `gsc login --write`. Dry run unless --yes. "
-        "Examples: gsc request-indexing https://example.com/new-post --yes | "
-        "gsc request-indexing --sitemap https://example.com/sitemap.xml "
+        "enabled in your GCP project, and `wakako login --write`. Dry run unless --yes. "
+        "Examples: wakako request-indexing https://example.com/new-post --yes | "
+        "wakako request-indexing --sitemap https://example.com/sitemap.xml "
         "--site sc-domain:example.com --only-unindexed --yes"
     ),
 )
@@ -333,7 +334,7 @@ def request_indexing_cmd(
     _emit(rows, fmt, output_path)
 
 
-@ga_app.command("properties", epilog="Example: gsc ga properties")
+@ga_app.command("properties", epilog="Example: wakako ga properties")
 @guarded
 def ga_properties(fmt: FormatOpt = None, output_path: OutputOpt = None):
     """List the GA4 properties you can access (numeric ID, name, account, website URLs)."""
@@ -344,14 +345,14 @@ def ga_properties(fmt: FormatOpt = None, output_path: OutputOpt = None):
 @ga_app.command(
     "report",
     epilog=(
-        "Examples: gsc ga report 123456789 --metrics sessions,activeUsers --dims date | "
-        "gsc ga report 123456789 --organic --dims landingPage --metrics sessions,keyEvents "
+        "Examples: wakako ga report 123456789 --metrics sessions,activeUsers --dims date | "
+        "wakako ga report 123456789 --organic --dims landingPage --metrics sessions,keyEvents "
         '--filter "country equals Kazakhstan" --sort sessions --limit 50'
     ),
 )
 @guarded
 def ga_report(
-    property_id: Annotated[str, typer.Argument(metavar="PROPERTY", help="Numeric GA4 property ID (see `gsc ga properties`).")],
+    property_id: Annotated[str, typer.Argument(metavar="PROPERTY", help="Numeric GA4 property ID (see `wakako ga properties`).")],
     metrics: Annotated[str, typer.Option("--metrics", help="Comma-separated GA4 metrics, e.g. sessions,activeUsers,engagementRate,keyEvents.")] = "sessions,activeUsers",
     dims: Annotated[str, typer.Option("--dims", help="Comma-separated GA4 dimensions, e.g. date,landingPage,sessionDefaultChannelGroup. Empty = totals.")] = "",
     days: Annotated[int, typer.Option("--days", help="Last N days, ending yesterday.")] = 28,
@@ -388,14 +389,14 @@ def ga_report(
     "landing-pages",
     epilog=(
         "Joins GSC and GA per page: search clicks/impressions/position next to organic "
-        "sessions, engagement and key events. Example: gsc ga landing-pages "
+        "sessions, engagement and key events. Example: wakako ga landing-pages "
         "sc-domain:example.com --property 123456789 --limit 50"
     ),
 )
 @guarded
 def ga_landing_pages(
     site: Annotated[str, typer.Argument(help="GSC property: sc-domain:example.com or https://example.com/")],
-    property_id: Annotated[str, typer.Option("--property", help="Numeric GA4 property ID for the same website (see `gsc ga properties`).")] = ...,
+    property_id: Annotated[str, typer.Option("--property", help="Numeric GA4 property ID for the same website (see `wakako ga properties`).")] = ...,
     days: Annotated[int, typer.Option("--days", help="Days back from the latest available GSC date.")] = 28,
     start: Annotated[Optional[str], typer.Option("--start", help="YYYY-MM-DD (use with --end).")] = None,
     end: Annotated[Optional[str], typer.Option("--end", help="YYYY-MM-DD (use with --start).")] = None,
@@ -415,7 +416,7 @@ def ga_landing_pages(
 
 
 def _skill_text() -> str:
-    return files("gsc_cli").joinpath("skill", "SKILL.md").read_text(encoding="utf-8")
+    return files("wakako").joinpath("skill", "SKILL.md").read_text(encoding="utf-8")
 
 
 @skill_app.command("show")
@@ -431,9 +432,9 @@ def skill_install(
         typer.Option("--dest", help="Skills directory. Default: ~/.claude/skills"),
     ] = None,
 ):
-    """Install SKILL.md as a Claude Code skill (<dest>/gsc/SKILL.md)."""
+    """Install SKILL.md as a Claude Code skill (<dest>/wakako/SKILL.md)."""
     base = dest or Path.home() / ".claude" / "skills"
-    target = base / "gsc" / "SKILL.md"
+    target = base / "wakako" / "SKILL.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_skill_text(), encoding="utf-8")
     typer.echo(f"Installed skill to {target}")

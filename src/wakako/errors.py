@@ -1,4 +1,4 @@
-class GscError(Exception):
+class WakakoError(Exception):
     """A user-facing error. The CLI reports it and exits with `exit_code`.
 
     `code` is a stable machine-readable string; `hint` is an optional next step.
@@ -12,21 +12,21 @@ class GscError(Exception):
         self.hint = hint
 
 
-class UsageError(GscError):
+class UsageError(WakakoError):
     code = "usage"
     exit_code = 2
 
 
-class AuthError(GscError):
+class AuthError(WakakoError):
     code = "auth"
     exit_code = 3
 
 
-class PermissionDenied(GscError):
+class PermissionDenied(WakakoError):
     code = "permission"
     exit_code = 4
 
 
-class QuotaError(GscError):
+class QuotaError(WakakoError):
     code = "quota"
     exit_code = 5

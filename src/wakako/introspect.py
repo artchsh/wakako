@@ -1,8 +1,8 @@
-"""Machine-readable description of the CLI, for `gsc commands`."""
+"""Machine-readable description of the CLI, for `wakako commands`."""
 
 import typer.main
 
-from gsc_cli import client, output
+from wakako import client, output
 
 CHOICES = {
     "--dims": list(client.VALID_DIMS),
@@ -24,7 +24,7 @@ def _param(p, command: str = "") -> dict:
         info["flags"] = list(p.opts)
         info["default"] = None if p.default is None or p.name == "help" else p.default
         for flag in p.opts:
-            # GSC value lists don't apply to `gsc ga ...` (GA has its own names)
+            # GSC value lists don't apply to `wakako ga ...` (GA has its own names)
             if flag in CHOICES and not command.startswith("ga "):
                 info["choices"] = CHOICES[flag]
     return info
@@ -40,14 +40,14 @@ def describe(app) -> dict:
         else:
             commands.append(_command(name, cmd))
     return {
-        "name": "gsc",
+        "name": "wakako",
         "commands": commands,
         "filter_operators": list(client.OPERATORS),
         "exit_codes": {
             "0": "ok",
             "1": "other error",
             "2": "usage error (bad argument/filter/date/format)",
-            "3": "not logged in or session expired (a human must run `gsc login`)",
+            "3": "not logged in or session expired (a human must run `wakako login`)",
             "4": "no permission for that property",
             "5": "API quota exceeded",
         },
