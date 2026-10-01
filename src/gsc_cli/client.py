@@ -127,7 +127,10 @@ def _needs_write_scope(error: HttpError) -> bool:
     return "scope_insufficient" in text or ("insufficient" in text and "scope" in text)
 
 
-def execute(request, *, site: str | None = None, sleep=time.sleep):
+def execute(
+    request, *, site: str | None = None, sleep=time.sleep,
+    login_flag: str = "--write", permission_hint: str | None = None,
+):
     delay = 1
     for attempt in range(3):
         try:
@@ -145,14 +148,14 @@ def execute(request, *, site: str | None = None, sleep=time.sleep):
             if status == 403 and _needs_write_scope(e):
                 raise AuthError(
                     "Missing permission scope for this action (403).",
-                    hint="Run `gsc login --write` (human step: browser sign-in) to grant write access.",
+                    hint=f"Run `gsc login {login_flag}` (human step: browser sign-in) to grant access.",
                 ) from e
             if status == 403:
                 target = f"No access to {site}" if site else "Permission denied"
                 raise PermissionDenied(
                     f"{target} (403): {_reason(e).rstrip('.')}.",
-                    hint="Check the exact property string with `gsc sites` and that "
-                    "you are logged in as the right Google account.",
+                    hint=permission_hint or "Check the exact property string with `gsc sites` "
+                    "and that you are logged in as the right Google account.",
                 ) from e
             raise GscError(f"Google API error {status}: {_reason(e)}") from e
 

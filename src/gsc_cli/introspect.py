@@ -12,7 +12,7 @@ CHOICES = {
 }
 
 
-def _param(p) -> dict:
+def _param(p, command: str = "") -> dict:
     info = {
         "name": p.name,
         "kind": p.param_type_name,  # "option" | "argument"
@@ -24,7 +24,8 @@ def _param(p) -> dict:
         info["flags"] = list(p.opts)
         info["default"] = None if p.default is None or p.name == "help" else p.default
         for flag in p.opts:
-            if flag in CHOICES:
+            # GSC value lists don't apply to `gsc ga ...` (GA has its own names)
+            if flag in CHOICES and not command.startswith("ga "):
                 info["choices"] = CHOICES[flag]
     return info
 
@@ -57,5 +58,5 @@ def _command(name: str, cmd) -> dict:
     return {
         "name": name,
         "help": (cmd.help or "").strip(),
-        "params": [_param(p) for p in cmd.params if p.name != "help"],
+        "params": [_param(p, name) for p in cmd.params if p.name != "help"],
     }

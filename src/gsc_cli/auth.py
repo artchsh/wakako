@@ -18,6 +18,8 @@ SCOPES_WRITE = [
     "https://www.googleapis.com/auth/webmasters",
     "https://www.googleapis.com/auth/indexing",
 ]
+# Opt-in via `gsc login --ga`: read Google Analytics 4 (Data + Admin APIs).
+GA_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
 NOT_LOGGED_IN = "Not logged in or session expired - run `gsc login`."
 LOGIN_HINT = "`gsc login` opens a browser and needs a human; an agent cannot complete it."
 
@@ -41,7 +43,19 @@ def token_file() -> Path:
     return config_dir() / "token.json"
 
 
-def login(client_secret_path: "Path | str | None" = None, write: bool = False) -> Path:
+def requested_scopes(write: bool = False, ga: bool = False) -> list[str]:
+    """Scopes to request at login: what was asked for plus anything already granted, so a
+    later `gsc login --ga` never silently drops write access (and vice versa)."""
+    granted = set(granted_scopes())
+    wanted = list(SCOPES_WRITE if (write or set(SCOPES_WRITE) <= granted) else SCOPES)
+    if ga or GA_SCOPE in granted:
+        wanted.append(GA_SCOPE)
+    return list(dict.fromkeys(wanted))
+
+
+def login(
+    client_secret_path: "Path | str | None" = None, write: bool = False, ga: bool = False
+) -> Path:
     if client_secret_path is not None:
         src = Path(client_secret_path)
         if not src.is_file():
@@ -57,7 +71,7 @@ def login(client_secret_path: "Path | str | None" = None, write: bool = False) -
 
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            str(client_secret_file()), SCOPES_WRITE if write else SCOPES
+            str(client_secret_file()), requested_scopes(write, ga)
         )
     except (ValueError, KeyError):
         raise UsageError(
@@ -114,3 +128,22 @@ def granted_scopes() -> list[str]:
     except (OSError, ValueError):
         return []
     return scopes.split(" ") if isinstance(scopes, str) else list(scopes)
+
+
+def _ga_credentials():
+    creds = get_credentials()
+    if GA_SCOPE not in granted_scopes():
+        raise AuthError(
+            "Google Analytics access has not been granted.",
+            hint="Run `gsc login --ga` (human step: browser sign-in). Also enable the "
+            "'Google Analytics Data API' and 'Google Analytics Admin API' in your GCP project.",
+        )
+    return creds
+
+
+def get_analytics_data_service():
+    return build("analyticsdata", "v1beta", credentials=_ga_credentials(), cache_discovery=False)
+
+
+def get_analytics_admin_service():
+    return build("analyticsadmin", "v1beta", credentials=_ga_credentials(), cache_discovery=False)

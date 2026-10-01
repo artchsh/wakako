@@ -103,3 +103,51 @@ def test_get_indexing_service_builds_v3(cfg, monkeypatch):
     monkeypatch.setattr(auth, "build", fake_build)
     assert auth.get_indexing_service() == "svc"
     assert seen == {"name": "indexing", "version": "v3"}
+
+
+def test_login_ga_adds_analytics_scope(cfg, flow):
+    saved_client(cfg)
+    auth.login(ga=True)
+    assert flow.scopes == [*auth.SCOPES, auth.GA_SCOPE]
+    auth.login(write=True, ga=True)
+    assert flow.scopes == [*auth.SCOPES_WRITE, auth.GA_SCOPE]
+
+
+def test_relogin_keeps_capabilities_already_granted(cfg, flow):
+    saved_client(cfg)
+    (cfg / "token.json").write_text(json.dumps({"scopes": [*auth.SCOPES_WRITE, auth.GA_SCOPE]}))
+    auth.login()  # plain login must not silently drop write or GA
+    assert set(flow.scopes) == {*auth.SCOPES_WRITE, auth.GA_SCOPE}
+    (cfg / "token.json").write_text(json.dumps({"scopes": list(auth.SCOPES)}))
+    auth.login()
+    assert flow.scopes == auth.SCOPES
+
+
+def _logged_in_with(cfg, monkeypatch, scopes):
+    cfg.mkdir(parents=True, exist_ok=True)
+    (cfg / "token.json").write_text(json.dumps({"scopes": scopes}))
+
+    class Creds:
+        valid = True
+
+    monkeypatch.setattr(auth, "Credentials",
+                        types.SimpleNamespace(from_authorized_user_file=lambda p, s: Creds()))
+
+
+def test_ga_services_refuse_without_ga_scope(cfg, monkeypatch):
+    from gsc_cli.errors import AuthError
+
+    _logged_in_with(cfg, monkeypatch, list(auth.SCOPES))
+    for getter in (auth.get_analytics_data_service, auth.get_analytics_admin_service):
+        with pytest.raises(AuthError) as exc:
+            getter()
+        assert "gsc login --ga" in exc.value.hint
+
+
+def test_ga_services_build_data_and_admin_v1beta(cfg, monkeypatch):
+    _logged_in_with(cfg, monkeypatch, [*auth.SCOPES, auth.GA_SCOPE])
+    seen = []
+    monkeypatch.setattr(auth, "build", lambda name, version, credentials, cache_discovery: seen.append((name, version)) or "svc")
+    assert auth.get_analytics_data_service() == "svc"
+    assert auth.get_analytics_admin_service() == "svc"
+    assert seen == [("analyticsdata", "v1beta"), ("analyticsadmin", "v1beta")]

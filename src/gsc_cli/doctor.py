@@ -29,6 +29,14 @@ def run_checks() -> list[dict]:
         else "not granted (optional): read-only. Run `gsc login --write` for write actions",
     )
 
+    ga_granted = auth.GA_SCOPE in auth.granted_scopes()
+    add(
+        "ga_access",
+        "ok",
+        "granted (gsc ga ...)" if ga_granted
+        else "not granted (optional): GSC works without it. Run `gsc login --ga` for Analytics",
+    )
+
     try:
         service = auth.get_service()
     except GscError as e:

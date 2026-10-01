@@ -1,6 +1,6 @@
 ---
 name: gsc
-description: Query Google Search Console from the terminal with the `gsc` CLI - search performance (clicks, impressions, CTR, position by query/page/country/device/date), period-over-period comparison, URL indexing status (single or whole sitemap), sitemaps, and best-effort indexing requests. Use when the user asks about organic search traffic, rankings, keywords, indexing, or Search Console data.
+description: Query Google Search Console from the terminal with the `gsc` CLI - search performance (clicks, impressions, CTR, position by query/page/country/device/date), period-over-period comparison, URL indexing status (single or whole sitemap), sitemaps, best-effort indexing requests, and optional Google Analytics 4 reports plus a combined search+analytics page analysis. Use when the user asks about organic search traffic, rankings, keywords, indexing, Search Console data, or website analytics / GA4.
 ---
 
 # gsc - Google Search Console CLI
@@ -26,8 +26,10 @@ or if `gsc doctor` reports a failing `token`/`credentials` check, stop and ask t
 to run `gsc login` (first time only: `gsc login --client-secret path/to/client_secret.json`,
 see the README for creating that file).
 
-Write actions need `gsc login --write` (also human). `gsc doctor` shows `write_access`:
-if it says "not granted", ask the user before attempting any write command.
+Write actions need `gsc login --write` and Google Analytics needs `gsc login --ga` (both
+human; they can be combined, and a later login keeps what was already granted).
+`gsc doctor` shows `write_access` and `ga_access`: if one says "not granted", ask the
+user before attempting those commands. Both are optional; everything else works without them.
 
 ## Commands
 
@@ -42,6 +44,9 @@ gsc sitemaps SITE                            # sitemaps + error/warning counts
 gsc sitemaps SITE --submit URL               # (write) submit/resubmit a sitemap
 gsc sitemaps SITE --delete URL --yes         # (write) remove a sitemap from Search Console
 gsc request-indexing URL... [--yes]          # (write, best-effort) ask Google to recrawl
+gsc ga properties                           # (GA) GA4 properties: numeric ID, name, account, website URLs
+gsc ga report PROPERTY [options]             # (GA) any GA4 report
+gsc ga landing-pages SITE --property ID      # (GA) per page: GSC clicks next to GA organic sessions
 gsc commands                                 # full machine-readable CLI description
 gsc logout                                   # delete the saved token (only if the user asks)
 gsc skill show                               # print this guide
@@ -115,6 +120,43 @@ discovered), "Crawled - currently not indexed", "Discovered - currently not inde
   before re-running with `--yes`. `--only-unindexed` (needs `--site`) first inspects up to
   `--limit` URLs and submits only the ones that are not indexed.
 
+## Google Analytics 4 (optional)
+
+Not needed for any GSC command. Needs `gsc login --ga` (human) and the GA4 account having
+at least Viewer access. GA4 only (Universal Analytics is gone). Properties are identified
+by a **numeric ID**: get it from `gsc ga properties`, whose `websites` column (the web
+stream URLs) shows which property belongs to which site. If `gsc ga ...` exits 3, the user
+has not granted GA access: ask them to run `gsc login --ga`.
+
+### `gsc ga report PROPERTY` options
+
+| Option | Meaning | Default |
+|---|---|---|
+| `--metrics a,b` | GA4 API metric names (`sessions`, `activeUsers`, `engagementRate`, `averageSessionDuration`, `keyEvents`, `screenPageViews`, `bounceRate`...) | `sessions,activeUsers` |
+| `--dims a,b` | GA4 API dimension names (`date`, `landingPage`, `pagePath`, `sessionDefaultChannelGroup`, `sessionSource`, `country`, `deviceCategory`...). Empty = totals | none |
+| `--days N` / `--start` `--end` | Last N days ending **yesterday**, or an explicit range | `28` |
+| `--filter "DIM OP VALUE"` | Repeatable, ANDed. OP: `equals notEquals contains notContains beginsWith endsWith regex notRegex` | none |
+| `--organic` | Only organic-search sessions | off |
+| `--sort NAME[:asc\|:desc]` | A requested metric or dimension | first metric, desc |
+| `--limit N` | Max rows (`0` = all) | `1000` |
+
+Rows have one key per dimension (string) and per metric (number). Names are validated by
+Google: a wrong dimension/metric name returns exit code 1 with the API's message.
+
+### `gsc ga landing-pages SITE --property ID`
+
+The combined analysis. Joins GSC (page level) with GA organic sessions per landing page, for
+the same dates (GSC's 3-day lag applies; `--days/--start/--end/--limit` as in `query`).
+Columns: `page, clicks, impressions, ctr, position` (from GSC) and `sessions,
+sessions_per_click, engagement_rate, avg_session_duration (seconds), key_events` (from GA,
+organic search only). Scoped to the property's hostname (and path, for URL-prefix
+properties). Pages seen by only one side are kept: GSC-only pages have `sessions: 0`; GA-only
+pages (e.g. Bing/other-engine organic traffic) have `clicks: null`.
+How to read it: `sessions_per_click` far below 1 means clicks that never became a measured
+session (consent banner blocking GA, slow load, bots); above 1 means other search engines
+or tracking quirks; compare pages at similar positions on `engagement_rate` and
+`key_events` to find content that ranks but does not convert.
+
 ## Recipes
 
 ```bash
@@ -140,6 +182,13 @@ gsc query sc-domain:example.com --dims query --filter "page equals https://examp
 # Daily trend / device split
 gsc query SITE --dims date --days 90 --limit 0
 gsc query SITE --dims device
+
+# (GA) Which property is this site? Then traffic, organic traffic, and the combined view
+gsc ga properties
+gsc ga report 123456789 --dims date --metrics sessions,activeUsers --days 30
+gsc ga report 123456789 --organic --dims landingPage --metrics sessions,engagementRate,keyEvents --limit 50
+gsc ga report 123456789 --dims sessionDefaultChannelGroup --metrics sessions     # traffic by channel
+gsc ga landing-pages sc-domain:example.com --property 123456789 --limit 50
 
 # Is this URL indexed? Which URLs in the sitemap are not?
 gsc inspect https://example.com/pricing --site sc-domain:example.com

@@ -46,6 +46,28 @@ same for impressions, ctr, position), biggest movers first (`--sort`, `--min-imp
 4 at a time, and returns one row per URL; `--only-unindexed` keeps just the ones Google
 has not indexed. URL Inspection quota is about 2,000 URLs per property per day.
 
+## Google Analytics 4 (optional)
+
+GSC works without any of this. To add Analytics reports and a combined search + analytics
+view:
+
+1. In the same GCP project, enable the **Google Analytics Data API** and the
+   **Google Analytics Admin API** (APIs & Services > Library).
+2. `gsc login --ga` (a human step; combine with `--write` if you want both). Your Google
+   account needs at least Viewer access on the GA4 property. Later logins keep whatever you
+   already granted; `gsc logout` first if you want to start from scratch.
+
+```bash
+gsc ga properties                                   # numeric property IDs + their website URLs
+gsc ga report 123456789 --dims date --metrics sessions,activeUsers
+gsc ga report 123456789 --organic --dims landingPage --metrics sessions,engagementRate,keyEvents --limit 50
+gsc ga landing-pages sc-domain:example.com --property 123456789 --limit 50
+```
+
+`gsc ga landing-pages` lines up each page's search clicks, impressions and position from
+Search Console with its organic sessions, engagement rate and key events from Analytics.
+`gsc doctor` shows whether GA access has been granted (`ga_access`).
+
 ## Write actions (optional, opt-in)
 
 Everything above is read-only. To also **submit/delete sitemaps** and **request indexing**,

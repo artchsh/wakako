@@ -288,6 +288,9 @@ def test_missing_write_scope_points_to_login_write():
     with pytest.raises(AuthError) as exc:
         client.execute(FakeRequest(err))
     assert exc.value.exit_code == 3 and "gsc login --write" in exc.value.hint
+    with pytest.raises(AuthError) as ga_exc:
+        client.execute(FakeRequest(err), login_flag="--ga")
+    assert "gsc login --ga" in ga_exc.value.hint
 
 
 def test_plain_403_is_still_permission_denied():

@@ -130,10 +130,10 @@ def test_inspect_requires_site_and_passes_args(monkeypatch):
 
 def test_login_passes_client_secret_path(monkeypatch, tmp_path):
     seen = {}
+    monkeypatch.setenv("GSC_CONFIG_DIR", str(tmp_path / "cfg"))  # hermetic: no real token
 
-    def fake_login(path, write=False):
-        seen["path"] = path
-        seen["write"] = write
+    def fake_login(path, write=False, ga=False):
+        seen.update(path=path, write=write, ga=ga)
         return tmp_path / "token.json"
 
     monkeypatch.setattr(auth, "login", fake_login)
@@ -145,6 +145,8 @@ def test_login_passes_client_secret_path(monkeypatch, tmp_path):
     assert seen["write"] is False
     result = runner.invoke(app, ["login", "--client-secret", str(secret), "--write"])
     assert seen["write"] is True and "read + write" in result.output
+    result = runner.invoke(app, ["login", "--ga"])
+    assert seen["ga"] is True and "Google Analytics" in result.output
 
 
 def test_logout(monkeypatch):

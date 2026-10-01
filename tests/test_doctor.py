@@ -72,3 +72,15 @@ def test_doctor_reports_write_access(cfg, monkeypatch):
     monkeypatch.setattr(auth, "granted_scopes", lambda: list(auth.SCOPES_WRITE))
     row = by_check(doctor.run_checks())["write_access"]
     assert row["status"] == "ok" and row["detail"].startswith("granted")
+
+
+def test_doctor_reports_ga_access_as_optional(cfg, monkeypatch):
+    cfg.mkdir()
+    (cfg / "token.json").write_text("{}")
+    monkeypatch.setattr(auth, "get_service", lambda: "svc")
+    monkeypatch.setattr(client, "list_sites", lambda svc: [])
+    monkeypatch.setattr(auth, "granted_scopes", lambda: list(auth.SCOPES))
+    row = by_check(doctor.run_checks())["ga_access"]
+    assert row["status"] == "ok" and "not granted" in row["detail"] and "optional" in row["detail"]
+    monkeypatch.setattr(auth, "granted_scopes", lambda: [*auth.SCOPES, auth.GA_SCOPE])
+    assert by_check(doctor.run_checks())["ga_access"]["detail"].startswith("granted")

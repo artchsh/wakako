@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from gsc_cli import auth, client, doctor, introspect, output
+from gsc_cli import auth, client, doctor, ga, introspect, output
 from gsc_cli.errors import AuthError, GscError, UsageError
 
 app = typer.Typer(
@@ -23,6 +23,11 @@ app = typer.Typer(
 )
 skill_app = typer.Typer(help="The agent usage guide (SKILL.md) bundled with this tool.", no_args_is_help=True)
 app.add_typer(skill_app, name="skill")
+ga_app = typer.Typer(
+    help="Optional Google Analytics 4 commands. Need `gsc login --ga`; GSC works without it.",
+    no_args_is_help=True,
+)
+app.add_typer(ga_app, name="ga")
 
 FormatOpt = Annotated[
     Optional[str],
@@ -86,11 +91,18 @@ def login(
             help="Also grant write access: submit/delete sitemaps and request indexing.",
         ),
     ] = False,
+    ga_access: Annotated[
+        bool,
+        typer.Option("--ga", help="Also grant read access to Google Analytics 4 (`gsc ga ...`)."),
+    ] = False,
 ):
     """Log in with your Google account in the browser (human step)."""
-    token = auth.login(client_secret, write=write)
-    access = "read + write" if write else "read-only"
-    typer.echo(f"Logged in ({access}). Token saved to {token}")
+    token = auth.login(client_secret, write=write, ga=ga_access)
+    scopes = set(auth.granted_scopes())
+    parts = ["read + write" if set(auth.SCOPES_WRITE) <= scopes or write else "read-only"]
+    if ga_access or auth.GA_SCOPE in scopes:
+        parts.append("Google Analytics")
+    typer.echo(f"Logged in ({', '.join(parts)}). Token saved to {token}")
 
 
 @app.command()
@@ -318,6 +330,87 @@ def request_indexing_cmd(
         rows = [{"url": u, "status": "dry-run", "detail": "pass --yes to send"} for u in targets]
     else:
         rows = client.request_indexing(auth.get_indexing_service(), targets)
+    _emit(rows, fmt, output_path)
+
+
+@ga_app.command("properties", epilog="Example: gsc ga properties")
+@guarded
+def ga_properties(fmt: FormatOpt = None, output_path: OutputOpt = None):
+    """List the GA4 properties you can access (numeric ID, name, account, website URLs)."""
+    fmt = output.resolve_format(fmt)
+    _emit(ga.list_properties(auth.get_analytics_admin_service()), fmt, output_path)
+
+
+@ga_app.command(
+    "report",
+    epilog=(
+        "Examples: gsc ga report 123456789 --metrics sessions,activeUsers --dims date | "
+        "gsc ga report 123456789 --organic --dims landingPage --metrics sessions,keyEvents "
+        '--filter "country equals Kazakhstan" --sort sessions --limit 50'
+    ),
+)
+@guarded
+def ga_report(
+    property_id: Annotated[str, typer.Argument(metavar="PROPERTY", help="Numeric GA4 property ID (see `gsc ga properties`).")],
+    metrics: Annotated[str, typer.Option("--metrics", help="Comma-separated GA4 metrics, e.g. sessions,activeUsers,engagementRate,keyEvents.")] = "sessions,activeUsers",
+    dims: Annotated[str, typer.Option("--dims", help="Comma-separated GA4 dimensions, e.g. date,landingPage,sessionDefaultChannelGroup. Empty = totals.")] = "",
+    days: Annotated[int, typer.Option("--days", help="Last N days, ending yesterday.")] = 28,
+    start: Annotated[Optional[str], typer.Option("--start", help="YYYY-MM-DD (use with --end).")] = None,
+    end: Annotated[Optional[str], typer.Option("--end", help="YYYY-MM-DD (use with --start).")] = None,
+    filters: Annotated[
+        Optional[list[str]],
+        typer.Option("--filter", help='Repeatable, ANDed: "<dimension> <operator> <value>". Operators: equals, notEquals, contains, notContains, beginsWith, endsWith, regex, notRegex.'),
+    ] = None,
+    organic: Annotated[bool, typer.Option("--organic", help="Only organic-search sessions (sessionDefaultChannelGroup = Organic Search).")] = False,
+    sort: Annotated[Optional[str], typer.Option("--sort", help="A requested metric or dimension, optionally :asc or :desc. Default: first metric, descending.")] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Max rows (0 = all).")] = 1000,
+    fmt: FormatOpt = None,
+    output_path: OutputOpt = None,
+):
+    """Run a GA4 report (Data API runReport)."""
+    fmt = output.resolve_format(fmt)
+    begin, finish = ga.date_range(days, start, end)
+    dimensions = ga.parse_names(dims, "dimension")
+    metric_names = ga.parse_names(metrics, "metric")
+    parsed = [ga.parse_filter(f) for f in filters or []]
+    if organic:
+        parsed.insert(0, ga.ORGANIC_FILTER)
+    ga.normalize_property(property_id)
+    ga.build_order_by(sort, dimensions, metric_names)
+    rows = ga.run_report(
+        auth.get_analytics_data_service(), property_id, dimensions, metric_names,
+        begin, finish, parsed, sort, limit,
+    )
+    _emit(rows, fmt, output_path)
+
+
+@ga_app.command(
+    "landing-pages",
+    epilog=(
+        "Joins GSC and GA per page: search clicks/impressions/position next to organic "
+        "sessions, engagement and key events. Example: gsc ga landing-pages "
+        "sc-domain:example.com --property 123456789 --limit 50"
+    ),
+)
+@guarded
+def ga_landing_pages(
+    site: Annotated[str, typer.Argument(help="GSC property: sc-domain:example.com or https://example.com/")],
+    property_id: Annotated[str, typer.Option("--property", help="Numeric GA4 property ID for the same website (see `gsc ga properties`).")] = ...,
+    days: Annotated[int, typer.Option("--days", help="Days back from the latest available GSC date.")] = 28,
+    start: Annotated[Optional[str], typer.Option("--start", help="YYYY-MM-DD (use with --end).")] = None,
+    end: Annotated[Optional[str], typer.Option("--end", help="YYYY-MM-DD (use with --start).")] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Max rows (0 = all), most clicks first.")] = 100,
+    fmt: FormatOpt = None,
+    output_path: OutputOpt = None,
+):
+    """Per-page GSC + GA analysis: how search clicks turn into organic sessions and engagement."""
+    fmt = output.resolve_format(fmt)
+    begin, finish = client.date_range(days, start, end)
+    ga.normalize_property(property_id)
+    rows = ga.landing_pages(
+        auth.get_service(), auth.get_analytics_data_service(), site, property_id,
+        begin, finish, limit,
+    )
     _emit(rows, fmt, output_path)
 
 
