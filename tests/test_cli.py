@@ -2,9 +2,9 @@ import json
 
 from typer.testing import CliRunner
 
-from gsc_cli import auth, client
+from gsc_cli import auth, client, doctor
 from gsc_cli.cli import app
-from gsc_cli.errors import GscError
+from gsc_cli.errors import PermissionDenied, QuotaError
 
 runner = CliRunner()
 
@@ -58,11 +58,13 @@ def test_query_writes_output_file(monkeypatch, tmp_path):
     assert target.read_text(encoding="utf-8").startswith("query,clicks,impressions,ctr,position")
 
 
-def test_query_invalid_filter_exits_1_with_message(monkeypatch):
+def test_query_invalid_filter_exits_2_with_json_error(monkeypatch):
     monkeypatch.setattr(auth, "get_service", lambda: "svc")
     result = runner.invoke(app, ["query", "sc-domain:x.com", "--filter", "bogus"])
-    assert result.exit_code == 1
-    assert "Invalid filter" in result.output
+    assert result.exit_code == 2
+    err = json.loads(result.output)["error"]
+    assert err["code"] == "usage"
+    assert "Invalid filter" in err["message"]
 
 
 def test_query_invalid_format_fails_before_calling_api(monkeypatch):
@@ -71,26 +73,29 @@ def test_query_invalid_format_fails_before_calling_api(monkeypatch):
 
     monkeypatch.setattr(auth, "get_service", boom)
     result = runner.invoke(app, ["query", "sc-domain:x.com", "--format", "xml"])
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert "Unknown format" in result.output
 
 
-def test_not_logged_in_exits_1_pointing_to_login(tmp_path, monkeypatch):
+def test_not_logged_in_exits_3_pointing_to_login(tmp_path, monkeypatch):
     monkeypatch.setenv("GSC_CONFIG_DIR", str(tmp_path / "empty"))
     result = runner.invoke(app, ["sites"])
-    assert result.exit_code == 1
-    assert "gsc login" in result.output
+    assert result.exit_code == 3
+    err = json.loads(result.output)["error"]
+    assert err["code"] == "auth"
+    assert "gsc login" in err["message"]
+    assert "human" in err["hint"]
 
 
 def test_api_error_is_shown_without_traceback(monkeypatch):
     monkeypatch.setattr(auth, "get_service", lambda: "svc")
 
     def denied(svc):
-        raise GscError("No access to sc-domain:x.com (403)")
+        raise PermissionDenied("No access to sc-domain:x.com (403)", hint="check gsc sites")
 
     monkeypatch.setattr(client, "list_sites", denied)
     result = runner.invoke(app, ["sites"])
-    assert result.exit_code == 1
+    assert result.exit_code == 4
     assert "No access" in result.output
     assert "Traceback" not in result.output
 
@@ -143,3 +148,84 @@ def test_logout(monkeypatch):
     result = runner.invoke(app, ["logout"])
     assert result.exit_code == 0
     assert "Logged out" in result.output
+
+
+# ---- agent-facing behaviour ---------------------------------------------------
+
+def test_default_format_is_json_when_not_a_tty(monkeypatch):
+    monkeypatch.setattr(auth, "get_service", lambda: "svc")
+    monkeypatch.setattr(client, "list_sites", lambda svc: [{"site": "s", "permission": "p"}])
+    result = runner.invoke(app, ["sites"])  # no --format
+    assert json.loads(result.output) == [{"site": "s", "permission": "p"}]
+
+
+def test_quota_error_exit_5_and_hint(monkeypatch):
+    monkeypatch.setattr(auth, "get_service", lambda: "svc")
+
+    def limited(svc):
+        raise QuotaError("Quota exceeded (429).", hint="Wait a bit and retry.")
+
+    monkeypatch.setattr(client, "list_sites", limited)
+    result = runner.invoke(app, ["sites"])
+    assert result.exit_code == 5
+    assert json.loads(result.output)["error"] == {
+        "code": "quota", "message": "Quota exceeded (429).", "hint": "Wait a bit and retry.",
+    }
+
+
+def test_commands_describes_cli_as_json():
+    result = runner.invoke(app, ["commands"])
+    assert result.exit_code == 0
+    doc = json.loads(result.output)
+    names = {c["name"] for c in doc["commands"]}
+    assert {"login", "logout", "sites", "query", "inspect", "sitemaps", "doctor",
+            "commands", "skill show", "skill install"} <= names
+    query = next(c for c in doc["commands"] if c["name"] == "query")
+    dims = next(p for p in query["params"] if p["name"] == "dims")
+    assert dims["choices"] == ["query", "page", "country", "device", "date"]
+    assert dims["default"] == "query"
+    assert next(p for p in query["params"] if p["name"] == "site")["required"] is True
+    assert "includingRegex" in doc["filter_operators"]
+    assert doc["exit_codes"]["3"].startswith("not logged in")
+
+
+def test_doctor_all_ok(monkeypatch):
+    monkeypatch.setattr(
+        doctor, "run_checks", lambda: [{"check": "token", "status": "ok", "detail": "x"}]
+    )
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)[0]["status"] == "ok"
+
+
+def test_doctor_failure_exits_3(monkeypatch):
+    monkeypatch.setattr(
+        doctor, "run_checks", lambda: [{"check": "token", "status": "fail", "detail": "x"}]
+    )
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 3
+
+
+def test_skill_show_prints_guide():
+    result = runner.invoke(app, ["skill", "show"])
+    assert result.exit_code == 0
+    assert result.output.startswith("---\nname: gsc")
+
+
+def test_skill_install_writes_file(tmp_path):
+    result = runner.invoke(app, ["skill", "install", "--dest", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    installed = (tmp_path / "gsc" / "SKILL.md").read_text(encoding="utf-8")
+    assert installed.startswith("---\nname: gsc")
+
+
+def test_skill_mentions_every_command_and_flag():
+    guide = runner.invoke(app, ["skill", "show"]).output
+    doc = json.loads(runner.invoke(app, ["commands"]).output)
+    for command in doc["commands"]:
+        assert f"gsc {command['name']}" in guide, command["name"]
+    query = next(c for c in doc["commands"] if c["name"] == "query")
+    for param in query["params"]:
+        for flag in param.get("flags", []):
+            if flag not in ("--format", "--output"):
+                assert flag in guide, flag

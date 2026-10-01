@@ -5,7 +5,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from gsc_cli import client
-from gsc_cli.errors import GscError
+from gsc_cli.errors import GscError, PermissionDenied, QuotaError, UsageError
 
 
 def http_error(status, message="boom"):
@@ -215,3 +215,19 @@ def test_inspect_url_tolerates_missing_sections():
         Fake(urlInspection=FakeUrlInspection(Empty())), "s", "https://x.com/a"
     )
     assert {r["field"]: r["value"] for r in rows}["verdict"] == ""
+
+
+def test_error_types_and_exit_codes():
+    with pytest.raises(PermissionDenied) as denied:
+        client.execute(FakeRequest(http_error(403)), site="s")
+    assert denied.value.exit_code == 4 and denied.value.hint
+
+    with pytest.raises(QuotaError) as quota:
+        client.execute(
+            FakeRequest(http_error(429), http_error(429), http_error(429)), sleep=lambda s: None
+        )
+    assert quota.value.exit_code == 5
+
+    with pytest.raises(UsageError) as usage:
+        client.parse_filter("bogus")
+    assert usage.value.exit_code == 2 and usage.value.code == "usage"

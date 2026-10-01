@@ -58,3 +58,16 @@ def test_emit_writes_file(tmp_path):
 def test_emit_prints_to_stdout(capsys):
     output.emit("hello")
     assert capsys.readouterr().out == "hello\n"
+
+
+def test_resolve_format_explicit_wins():
+    assert output.resolve_format("csv") == "csv"
+    with pytest.raises(GscError):
+        output.resolve_format("xml")
+
+
+def test_resolve_format_auto(monkeypatch):
+    monkeypatch.setattr(output.sys.stdout, "isatty", lambda: True, raising=False)
+    assert output.resolve_format(None) == "table"
+    monkeypatch.setattr(output.sys.stdout, "isatty", lambda: False, raising=False)
+    assert output.resolve_format(None) == "json"

@@ -9,10 +9,11 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from gsc_cli.errors import GscError
+from gsc_cli.errors import AuthError, UsageError
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 NOT_LOGGED_IN = "Not logged in or session expired - run `gsc login`."
+LOGIN_HINT = "`gsc login` opens a browser and needs a human; an agent cannot complete it."
 
 
 def config_dir() -> Path:
@@ -38,11 +39,11 @@ def login(client_secret_path: "Path | str | None" = None) -> Path:
     if client_secret_path is not None:
         src = Path(client_secret_path)
         if not src.is_file():
-            raise GscError(f"Client secret file not found: {src}")
+            raise UsageError(f"Client secret file not found: {src}")
         config_dir().mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, client_secret_file())
     elif not client_secret_file().is_file():
-        raise GscError(
+        raise UsageError(
             "No OAuth client secret saved yet. Run "
             "`gsc login --client-secret path/to/client_secret.json` "
             "(see README for how to create one)."
@@ -53,7 +54,7 @@ def login(client_secret_path: "Path | str | None" = None) -> Path:
             str(client_secret_file()), SCOPES
         )
     except (ValueError, KeyError):
-        raise GscError(
+        raise UsageError(
             f"{client_secret_file()} is not a valid OAuth client file. "
             "Download a 'Desktop app' client secret from Google Cloud Console."
         ) from None
@@ -73,19 +74,19 @@ def logout() -> bool:
 def get_credentials():
     path = token_file()
     if not path.is_file():
-        raise GscError(NOT_LOGGED_IN)
+        raise AuthError(NOT_LOGGED_IN, hint=LOGIN_HINT)
     try:
         creds = Credentials.from_authorized_user_file(str(path), SCOPES)
     except (ValueError, KeyError):
-        raise GscError(NOT_LOGGED_IN) from None
+        raise AuthError(NOT_LOGGED_IN, hint=LOGIN_HINT) from None
     if creds.valid:
         return creds
     if not creds.refresh_token:
-        raise GscError(NOT_LOGGED_IN)
+        raise AuthError(NOT_LOGGED_IN, hint=LOGIN_HINT)
     try:
         creds.refresh(Request())
     except RefreshError:
-        raise GscError(NOT_LOGGED_IN) from None
+        raise AuthError(NOT_LOGGED_IN, hint=LOGIN_HINT) from None
     path.write_text(creds.to_json(), encoding="utf-8")
     return creds
 

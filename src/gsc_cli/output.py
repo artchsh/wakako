@@ -2,19 +2,28 @@ import csv
 import io
 import json
 import shutil
+import sys
 from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
 
-from gsc_cli.errors import GscError
+from gsc_cli.errors import UsageError
 
 FORMATS = ("table", "json", "csv")
 
 
 def check_format(fmt: str) -> None:
     if fmt not in FORMATS:
-        raise GscError(f"Unknown format '{fmt}'. Valid formats: {', '.join(FORMATS)}.")
+        raise UsageError(f"Unknown format '{fmt}'. Valid formats: {', '.join(FORMATS)}.")
+
+
+def resolve_format(fmt: str | None) -> str:
+    """Explicit --format wins; otherwise table at a terminal, json when piped (agents)."""
+    if fmt is None:
+        return "table" if sys.stdout.isatty() else "json"
+    check_format(fmt)
+    return fmt
 
 
 def _cell(value) -> str:

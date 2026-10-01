@@ -3,11 +3,14 @@
 Google Search Console from the command line, using your personal Google account
 (OAuth — no service accounts). Read-only.
 
-## Install
+## Install (standalone, global `gsc` command)
 
 ```bash
-pipx install .        # or: pip install -e ".[dev]" inside a venv
+uv tool install .            # or: pipx install .
+gsc skill install            # optional: teach Claude Code to use it (~/.claude/skills/gsc)
 ```
+
+After pulling changes, reinstall with `uv tool install --force .`.
 
 ## One-time Google setup (about 5 minutes)
 
@@ -38,6 +41,18 @@ Search Analytics data lags by ~3 days, so `--days` counts back from 3 days ago.
 
 Credentials live in `%APPDATA%\gsc-wrapper` (Windows) or `~/.config/gsc-wrapper`
 (elsewhere). Override with `GSC_CONFIG_DIR`.
+
+## For AI agents
+
+The tool is built to be driven by an agent:
+
+- Output is **JSON by default when piped** (table in a terminal); `--format table|json|csv`
+  overrides. Errors are one JSON object on stderr: `{"error": {"code", "message", "hint"}}`.
+- Typed exit codes: `0` ok, `2` usage, `3` not logged in, `4` no permission, `5` quota.
+- `gsc doctor` checks setup without prompting; `gsc commands` prints every command, option,
+  valid value and exit code as JSON; `gsc skill show` prints the full usage guide
+  (`src/gsc_cli/skill/SKILL.md`), which `gsc skill install` copies into Claude Code skills.
+- `gsc login` is the only step that needs a human (browser sign-in).
 
 ## Development
 

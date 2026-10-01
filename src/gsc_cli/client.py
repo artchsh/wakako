@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 from googleapiclient.errors import HttpError
 
-from gsc_cli.errors import GscError
+from gsc_cli.errors import GscError, PermissionDenied, QuotaError, UsageError
 
 DATA_LAG_DAYS = 3
 ROW_LIMIT = 25000
@@ -17,7 +17,7 @@ def _parse_date(value: str) -> date:
     try:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError:
-        raise GscError(f"Invalid date '{value}'. Use YYYY-MM-DD.") from None
+        raise UsageError(f"Invalid date '{value}'. Use YYYY-MM-DD.") from None
 
 
 def date_range(
@@ -25,13 +25,13 @@ def date_range(
 ) -> tuple[str, str]:
     if start or end:
         if not (start and end):
-            raise GscError("Provide both --start and --end, or use --days.")
+            raise UsageError("Provide both --start and --end, or use --days.")
         start_d, end_d = _parse_date(start), _parse_date(end)
         if start_d > end_d:
-            raise GscError("--start must be on or before --end.")
+            raise UsageError("--start must be on or before --end.")
         return start_d.isoformat(), end_d.isoformat()
     if days < 1:
-        raise GscError("--days must be at least 1.")
+        raise UsageError("--days must be at least 1.")
     today = today or date.today()
     end_d = today - timedelta(days=DATA_LAG_DAYS)
     start_d = end_d - timedelta(days=days - 1)
@@ -42,7 +42,7 @@ def parse_dims(text: str) -> list[str]:
     dims = [d.strip() for d in text.split(",") if d.strip()]
     for d in dims:
         if d not in VALID_DIMS:
-            raise GscError(
+            raise UsageError(
                 f"Unknown dimension '{d}'. Valid dimensions: {', '.join(VALID_DIMS)}."
             )
     return dims
@@ -55,13 +55,13 @@ def parse_filter(text: str) -> dict:
         f"\"page contains /blog\". Operators: {', '.join(OPERATORS)}."
     )
     if len(parts) != 3:
-        raise GscError(usage)
+        raise UsageError(usage)
     dimension, operator, expression = parts
     if dimension not in VALID_DIMS:
-        raise GscError(f"{usage} Unknown dimension '{dimension}'.")
+        raise UsageError(f"{usage} Unknown dimension '{dimension}'.")
     ops = {o.lower(): o for o in OPERATORS}
     if operator.lower() not in ops:
-        raise GscError(f"{usage} Unknown operator '{operator}'.")
+        raise UsageError(f"{usage} Unknown operator '{operator}'.")
     return {
         "dimension": dimension,
         "operator": ops[operator.lower()],
@@ -71,7 +71,7 @@ def parse_filter(text: str) -> dict:
 
 def validate_search_type(value: str) -> str:
     if value not in VALID_TYPES:
-        raise GscError(
+        raise UsageError(
             f"Unknown search type '{value}'. Valid types: {', '.join(VALID_TYPES)}."
         )
     return value
@@ -118,14 +118,15 @@ def execute(request, *, site: str | None = None, sleep=time.sleep):
                     sleep(delay)
                     delay *= 2
                     continue
-                raise GscError(
-                    "Quota exceeded (429). Wait a bit and retry."
+                raise QuotaError(
+                    "Quota exceeded (429).", hint="Wait a bit and retry."
                 ) from e
             if status == 403:
                 target = f"No access to {site}" if site else "Permission denied"
-                raise GscError(
-                    f"{target} (403): {_reason(e)}. Check the property URL with "
-                    "`gsc sites` and that you are logged in as the right account."
+                raise PermissionDenied(
+                    f"{target} (403): {_reason(e).rstrip('.')}.",
+                    hint="Check the exact property string with `gsc sites` and that "
+                    "you are logged in as the right Google account.",
                 ) from e
             raise GscError(f"Google API error {status}: {_reason(e)}") from e
 
