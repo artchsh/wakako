@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gsc-wrapper"
+version = "0.1.0"
+description = "Command-line wrapper for Google Search Console using personal-account OAuth"
+requires-python = ">=3.10"
+dependencies = [
+  "typer>=0.12",
+  "rich>=13",
+  "google-auth>=2.29",
+  "google-auth-oauthlib>=1.2",
+  "google-api-python-client>=2.120",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+gsc = "gsc_cli.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gsc_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
