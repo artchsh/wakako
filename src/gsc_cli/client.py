@@ -1,4 +1,8 @@
+import json
+import time
 from datetime import date, datetime, timedelta
+
+from googleapiclient.errors import HttpError
 
 from gsc_cli.errors import GscError
 
@@ -93,3 +97,102 @@ def build_query_body(
     if filters:
         body["dimensionFilterGroups"] = [{"groupType": "and", "filters": filters}]
     return body
+
+
+def _reason(error: HttpError) -> str:
+    try:
+        return json.loads(error.content)["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        return str(error.reason or "unknown error")
+
+
+def execute(request, *, site: str | None = None, sleep=time.sleep):
+    delay = 1
+    for attempt in range(3):
+        try:
+            return request.execute()
+        except HttpError as e:
+            status = e.resp.status
+            if status == 429:
+                if attempt < 2:
+                    sleep(delay)
+                    delay *= 2
+                    continue
+                raise GscError(
+                    "Quota exceeded (429). Wait a bit and retry."
+                ) from e
+            if status == 403:
+                target = f"No access to {site}" if site else "Permission denied"
+                raise GscError(
+                    f"{target} (403): {_reason(e)}. Check the property URL with "
+                    "`gsc sites` and that you are logged in as the right account."
+                ) from e
+            raise GscError(f"Google API error {status}: {_reason(e)}") from e
+
+
+def query_rows(
+    service, site, dims, start, end, filters, search_type, limit
+) -> list[dict]:
+    rows: list[dict] = []
+    start_row = 0
+    while True:
+        page_size = ROW_LIMIT if limit <= 0 else min(ROW_LIMIT, limit - len(rows))
+        body = build_query_body(
+            dims, start, end, filters, search_type, start_row, page_size
+        )
+        response = execute(
+            service.searchanalytics().query(siteUrl=site, body=body), site=site
+        )
+        batch = response.get("rows", [])
+        for raw in batch:
+            row = dict(zip(dims, raw.get("keys", [])))
+            for metric in ("clicks", "impressions", "ctr", "position"):
+                row[metric] = raw.get(metric)
+            rows.append(row)
+        start_row += len(batch)
+        if len(batch) < page_size or (limit > 0 and len(rows) >= limit):
+            return rows
+
+
+def list_sites(service) -> list[dict]:
+    response = execute(service.sites().list())
+    return [
+        {"site": s["siteUrl"], "permission": s.get("permissionLevel", "")}
+        for s in response.get("siteEntry", [])
+    ]
+
+
+def list_sitemaps(service, site: str) -> list[dict]:
+    response = execute(service.sitemaps().list(siteUrl=site), site=site)
+    return [
+        {
+            "path": s.get("path", ""),
+            "type": s.get("type", ""),
+            "last_downloaded": s.get("lastDownloaded", ""),
+            "pending": s.get("isPending", False),
+            "errors": s.get("errors", "0"),
+            "warnings": s.get("warnings", "0"),
+        }
+        for s in response.get("sitemap", [])
+    ]
+
+
+def inspect_url(service, site: str, url: str) -> list[dict]:
+    body = {"inspectionUrl": url, "siteUrl": site}
+    response = execute(service.urlInspection().index().inspect(body=body), site=site)
+    result = response.get("inspectionResult", {})
+    index = result.get("indexStatusResult", {})
+    fields = {
+        "verdict": index.get("verdict"),
+        "coverage": index.get("coverageState"),
+        "indexing_state": index.get("indexingState"),
+        "robots_txt": index.get("robotsTxtState"),
+        "page_fetch": index.get("pageFetchState"),
+        "last_crawl": index.get("lastCrawlTime"),
+        "crawled_as": index.get("crawledAs"),
+        "google_canonical": index.get("googleCanonical"),
+        "user_canonical": index.get("userCanonical"),
+        "mobile_usability": result.get("mobileUsabilityResult", {}).get("verdict"),
+        "rich_results": result.get("richResultsResult", {}).get("verdict"),
+    }
+    return [{"field": k, "value": v or ""} for k, v in fields.items()]
