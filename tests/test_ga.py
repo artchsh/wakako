@@ -336,6 +336,11 @@ def test_landing_pages_keeps_one_sided_pages():
     assert ga_only["clicks"] is None and ga_only["sessions"] == 9 and ga_only["position"] is None
 
 
+def test_landing_pages_non_path_landing_values_stay_readable():
+    rows, _ = landing([], [("x.com", "(not set)", (2, 0.0, 0, 0))])
+    assert rows[0]["page"] == "x.com (not set)"
+
+
 def test_landing_pages_decodes_percent_encoding_and_respects_limit():
     rows, _ = landing(
         [gsc_row("https://x.com/%D1%82%D0%B5%D1%81%D1%82", 5, 50), gsc_row("https://x.com/z", 1, 10)],

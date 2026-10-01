@@ -247,8 +247,10 @@ def landing_pages(
                        "ctr": r["ctr"], "position": r["position"], "ga": None}
     for r in ga_rows:
         key = _page_key(r["hostName"], r["landingPage"])
+        landing = r["landingPage"]
+        page = f"https://{r['hostName']}{landing}" if landing.startswith("/") else f"{r['hostName']} {landing}"
         entry = merged.setdefault(key, {
-            "page": f"https://{r['hostName']}{r['landingPage']}",
+            "page": page,
             "clicks": None, "impressions": None, "ctr": None, "position": None, "ga": None,
         })
         entry["ga"] = r
