@@ -12,7 +12,7 @@ from googleapiclient.discovery import build
 from gsc_cli.errors import GscError
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
-NOT_LOGGED_IN = "Not logged in or session expired — run `gsc login`."
+NOT_LOGGED_IN = "Not logged in or session expired - run `gsc login`."
 
 
 def config_dir() -> Path:
